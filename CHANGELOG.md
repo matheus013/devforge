@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Expanded `.gitignore` to cover Python artifacts (`*.egg-info`, `htmlcov`, `.coverage`, `celerybeat-schedule`), frontend build outputs (`out/`), logs (`*.log`), editor configs (`.vscode/`, `.idea/`), OS files (`Thumbs.db`), and secret file extensions (`*.pem`, `*.key`, `*.crt`, `*.p12`).
+
 ### Added
 
 - Added client change-request chat behavior that refines unclear project changes into auditable operational prompts, questions, tickets, and `AgentRun` records.
