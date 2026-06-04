@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'if ! command -v git >/dev/null 2>&1; then echo \"BLOQUEADO: git nao encontrado no PATH.\"; exit 2; fi; BRANCH=$(git branch --show-current 2>/dev/null); if [ \"$BRANCH\" = \"main\" ]; then echo \"BLOQUEADO: voce esta na branch main. Crie uma branch antes: git checkout -b codex/<nome>\"; exit 2; fi; if [ -z \"$BRANCH\" ]; then echo \"BLOQUEADO: HEAD destacado (detached HEAD) ou fora de um repositorio git. Crie ou selecione uma branch antes de editar arquivos.\"; exit 2; fi'"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh auth *)",
+      "Bash(gh repo view*)",
+      "Bash(ssh-add *)",
+      "Bash(npm *)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(ruff *)",
+      "Bash(docker *)",
+      "WebFetch(domain:docs.anthropic.com)"
+    ]
+  }
+}
