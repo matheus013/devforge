@@ -35,4 +35,10 @@ class ApprovalSerializer(serializers.ModelSerializer):
             .exists()
         ):
             raise serializers.ValidationError("Project is not available for this user.")
+        decision = attrs.get("decision")
+        comment = attrs.get("comment", "").strip()
+        if decision in ("changes_requested", "rejected") and not comment:
+            raise serializers.ValidationError(
+                {"comment": "Um comentario e obrigatorio ao solicitar mudancas ou rejeitar."}
+            )
         return attrs

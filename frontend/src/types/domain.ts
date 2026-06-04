@@ -45,6 +45,8 @@ export type ProjectPlan = {
   estimate: { weeks?: number; confidence?: string; team?: string };
   acceptance_criteria: string[];
   status: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type Ticket = {
