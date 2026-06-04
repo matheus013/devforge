@@ -109,6 +109,45 @@ function statusTone(status?: string): "neutral" | "green" | "amber" | "red" {
   return "neutral";
 }
 
+const CLIENT_STATUS_LABELS: Record<string, string> = {
+  draft: "Briefing recebido",
+  planning: "Plano em elaboração",
+  waiting_approval: "Aguardando sua aprovação",
+  active: "Em produção",
+  blocked: "Ajustes solicitados",
+  exported: "Implantado",
+};
+
+const CLIENT_STAGE_LABELS: Record<string, string> = {
+  todo: "A fazer",
+  in_progress: "Em andamento",
+  blocked: "Bloqueado",
+  done: "Concluído",
+};
+
+const CLIENT_PLAN_LABELS: Record<string, string> = {
+  waiting_approval: "Aguardando aprovação",
+  approved: "Aprovado",
+  rejected: "Rejeitado",
+  changes_requested: "Ajustes solicitados",
+};
+
+function clientLabel(status?: string, map: Record<string, string> = CLIENT_STATUS_LABELS) {
+  return (status && map[status]) || status || "—";
+}
+
+function clientNextAction(status?: string): { text: string; urgent: boolean } {
+  switch (status) {
+    case "draft": return { text: "Complete o briefing do seu projeto", urgent: false };
+    case "planning": return { text: "Seu plano está sendo elaborado pelo time", urgent: false };
+    case "waiting_approval": return { text: "Revise e aprove o escopo do projeto", urgent: true };
+    case "active": return { text: "Projeto em produção — acompanhe o roadmap abaixo", urgent: false };
+    case "blocked": return { text: "Ajustes em análise pelo time", urgent: false };
+    case "exported": return { text: "Projeto implantado — acesse sua entrega abaixo", urgent: false };
+    default: return { text: "Selecione um projeto para ver o status", urgent: false };
+  }
+}
+
 function sumCosts(agentRuns: AgentRun[]) {
   return agentRuns.reduce((total, run) => total + Number(run.estimated_cost || 0), 0).toFixed(2);
 }
@@ -203,6 +242,8 @@ export default function Home() {
   const [messageBody, setMessageBody] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedRunner, setSelectedRunner] = useState<AgentRunner>("codex");
+  const [pendingDecision, setPendingDecision] = useState<"changes_requested" | "rejected" | null>(null);
+  const [approvalComment, setApprovalComment] = useState("");
 
   useEffect(() => {
     setToken(localStorage.getItem(tokenKey) ?? "");
@@ -293,6 +334,11 @@ export default function Home() {
     queryFn: () => apiRequest<Deployment[]>("/deployments/", token),
     enabled: Boolean(token),
   });
+  const approvalsQuery = useQuery({
+    queryKey: ["approvals", token],
+    queryFn: () => apiRequest<Array<{id: number; project: number; decision: string; comment: string; created_at: string}>>("/approvals/", token),
+    enabled: Boolean(token),
+  });
 
   const user = userQuery.data?.[0];
   const isTeam = user?.role === "admin" || user?.role === "staff";
@@ -349,6 +395,7 @@ export default function Home() {
       importsQuery.error,
       assessmentsQuery.error,
       deploymentsQuery.error,
+      approvalsQuery.error,
     ];
     if (errors.some((error) => String(error?.message ?? error).includes("API 401"))) {
       localStorage.removeItem(tokenKey);
@@ -360,6 +407,7 @@ export default function Home() {
   }, [
     agentRunsQuery.error,
     agentRegistryQuery.error,
+    approvalsQuery.error,
     assessmentsQuery.error,
     deploymentsQuery.error,
     importsQuery.error,
@@ -386,6 +434,7 @@ export default function Home() {
       queryClient.invalidateQueries({ queryKey: ["imports", token] }),
       queryClient.invalidateQueries({ queryKey: ["assessments", token] }),
       queryClient.invalidateQueries({ queryKey: ["deployments", token] }),
+      queryClient.invalidateQueries({ queryKey: ["approvals", token] }),
     ]);
   };
 
@@ -518,18 +567,20 @@ export default function Home() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: (decision: "approved" | "rejected" | "changes_requested") =>
+    mutationFn: ({ decision, comment }: { decision: "approved" | "rejected" | "changes_requested"; comment: string }) =>
       apiRequest("/approvals/", token, {
         method: "POST",
         body: JSON.stringify({
           project: selectedProject?.id,
           plan: selectedPlan?.id,
           decision,
-          comment: decision === "changes_requested" ? "Cliente pediu ajustes no plano." : "",
+          comment,
         }),
       }),
     onSuccess: async () => {
-      setNotice("Decisao registrada no plano.");
+      setPendingDecision(null);
+      setApprovalComment("");
+      setNotice("Decisão registrada com sucesso.");
       await invalidateWorkspace();
     },
   });
@@ -1028,48 +1079,79 @@ export default function Home() {
                           Nenhum projeto ainda. Crie o primeiro para gerar plano, roadmap e tickets.
                         </p>
                       ) : null}
-                      {projects.map((project) => (
-                        <button
-                          key={project.id}
-                          className={`w-full rounded-md border p-3 text-left ${
-                            project.id === selectedProject?.id
-                              ? "border-neutral-950 bg-neutral-50"
-                              : "border-neutral-200 bg-white"
-                          }`}
-                          onClick={() => setSelectedProjectId(project.id)}
-                          type="button"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <strong className="text-sm">{project.name}</strong>
-                            <Badge tone={statusTone(project.status)}>{project.status}</Badge>
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-sm text-neutral-500">
-                            {project.description || "Sem descricao"}
-                          </p>
-                        </button>
-                      ))}
+                      {projects.map((project) => {
+                        const next = clientNextAction(project.status);
+                        return (
+                          <button
+                            key={project.id}
+                            className={`w-full rounded-md border p-3 text-left transition-colors ${
+                              project.id === selectedProject?.id
+                                ? "border-neutral-950 bg-neutral-50"
+                                : "border-neutral-200 bg-white hover:border-neutral-400"
+                            }`}
+                            onClick={() => setSelectedProjectId(project.id)}
+                            type="button"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <strong className="text-sm">{project.name}</strong>
+                              <Badge tone={statusTone(project.status)}>
+                                {clientLabel(project.status)}
+                              </Badge>
+                            </div>
+                            <p className={`mt-1.5 text-xs ${next.urgent ? "font-medium text-amber-700" : "text-neutral-500"}`}>
+                              {next.text}
+                            </p>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
 
                 {selectedProject ? (
                   <>
+                    {/* Next action banner */}
+                    {(() => {
+                      const next = clientNextAction(selectedProject.status);
+                      return (
+                        <div className={`rounded-md border p-4 ${next.urgent ? "border-amber-300 bg-amber-50" : "border-neutral-200 bg-white"}`}>
+                          <div className="flex items-center gap-2">
+                            <div className={`h-2 w-2 rounded-full ${next.urgent ? "bg-amber-500" : "bg-teal-500"}`} />
+                            <p className={`text-sm font-medium ${next.urgent ? "text-amber-800" : "text-neutral-700"}`}>
+                              {next.text}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-neutral-500">
+                            Status: {clientLabel(selectedProject.status)}
+                          </p>
+                        </div>
+                      );
+                    })()}
+
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between">
-                        <h2 className="font-semibold">Roadmap visual</h2>
-                        <Badge tone={statusTone(selectedPlan?.status)}>{selectedPlan?.status ?? "sem plano"}</Badge>
+                        <h2 className="font-semibold">Roadmap de entrega</h2>
+                        <Badge tone={statusTone(selectedPlan?.status)}>
+                          {clientLabel(selectedPlan?.status, CLIENT_PLAN_LABELS)}
+                        </Badge>
                       </div>
-                      <div className="grid gap-3 md:grid-cols-4">
-                        {projectStages.map((stage) => (
-                          <div key={stage.id} className="rounded-md border border-neutral-200 p-3">
-                            <div className="mb-3 flex items-center justify-between">
-                              <span className="text-sm font-medium">{stage.name}</span>
-                              <Clock3 className="h-4 w-4 text-neutral-400" />
+                      {projectStages.length === 0 ? (
+                        <p className="text-sm text-neutral-500">Nenhuma etapa ainda. Gere um plano para ver o roadmap.</p>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-4">
+                          {projectStages.map((stage) => (
+                            <div key={stage.id} className="rounded-md border border-neutral-200 p-3">
+                              <div className="mb-3 flex items-center justify-between">
+                                <span className="text-sm font-medium">{stage.name}</span>
+                                <Clock3 className="h-4 w-4 text-neutral-400" />
+                              </div>
+                              <Badge tone={statusTone(stage.status)}>
+                                {clientLabel(stage.status, CLIENT_STAGE_LABELS)}
+                              </Badge>
                             </div>
-                            <Badge tone={statusTone(stage.status)}>{stage.status}</Badge>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
@@ -1078,80 +1160,182 @@ export default function Home() {
                         {selectedPlan ? <Badge tone={statusTone(selectedPlan.status)}>{selectedPlan.status}</Badge> : null}
                       </div>
                       {selectedPlan ? (
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <div>
-                            <p className="text-sm font-medium">Resumo</p>
-                            <p className="mt-1 text-sm text-neutral-600">{selectedPlan.summary}</p>
+                        <div className="space-y-4">
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                              <p className="text-sm font-medium">Resumo do escopo</p>
+                              <p className="mt-1 text-sm text-neutral-600">{selectedPlan.summary}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">Riscos identificados</p>
+                              <ul className="mt-1 space-y-1 text-sm text-neutral-600">
+                                {selectedPlan.risks.map((risk) => (
+                                  <li key={risk} className="flex gap-1.5">
+                                    <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />
+                                    {risk}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium">Riscos</p>
-                            <ul className="mt-1 space-y-1 text-sm text-neutral-600">
-                              {selectedPlan.risks.map((risk) => (
-                                <li key={risk}>{risk}</li>
-                              ))}
-                            </ul>
-                          </div>
-                          <div className="flex flex-wrap content-end items-end gap-2">
-                            <Button
-                              disabled={approveMutation.isPending}
-                              onClick={() => approveMutation.mutate("approved")}
-                              type="button"
-                            >
-                              Aprovar
-                            </Button>
-                            <Button
-                              className="bg-white text-neutral-900"
-                              disabled={approveMutation.isPending}
-                              onClick={() => approveMutation.mutate("changes_requested")}
-                              type="button"
-                            >
-                              Mudancas
-                            </Button>
-                            <Button
-                              className="bg-white text-neutral-900"
-                              disabled={approveMutation.isPending}
-                              onClick={() => approveMutation.mutate("rejected")}
-                              type="button"
-                            >
-                              Rejeitar
-                            </Button>
-                          </div>
+
+                          {pendingDecision ? (
+                            <div className="rounded-md border border-neutral-200 bg-neutral-50 p-4 space-y-3">
+                              <p className="text-sm font-medium">
+                                {pendingDecision === "changes_requested"
+                                  ? "Descreva quais mudanças você precisa:"
+                                  : "Explique o motivo da rejeição:"}
+                              </p>
+                              <textarea
+                                className="min-h-20 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900"
+                                placeholder="Escreva seu comentário aqui..."
+                                value={approvalComment}
+                                onChange={(e) => setApprovalComment(e.target.value)}
+                              />
+                              {approveMutation.error ? (
+                                <p className="text-sm text-rose-700">
+                                  {String((approveMutation.error as {payload?: {comment?: string[]}})?.payload?.comment?.[0] ?? "Não foi possível registrar a decisão.")}
+                                </p>
+                              ) : null}
+                              <div className="flex gap-2">
+                                <Button
+                                  disabled={approveMutation.isPending || !approvalComment.trim()}
+                                  onClick={() => approveMutation.mutate({ decision: pendingDecision, comment: approvalComment })}
+                                  type="button"
+                                >
+                                  Confirmar
+                                </Button>
+                                <Button
+                                  className="bg-white text-neutral-900"
+                                  onClick={() => { setPendingDecision(null); setApprovalComment(""); }}
+                                  type="button"
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                disabled={approveMutation.isPending}
+                                onClick={() => approveMutation.mutate({ decision: "approved", comment: "" })}
+                                type="button"
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                                Aprovar escopo
+                              </Button>
+                              <Button
+                                className="bg-white text-neutral-900"
+                                disabled={approveMutation.isPending}
+                                onClick={() => { setPendingDecision("changes_requested"); setApprovalComment(""); }}
+                                type="button"
+                              >
+                                Solicitar mudanças
+                              </Button>
+                              <Button
+                                className="bg-white text-neutral-900"
+                                disabled={approveMutation.isPending}
+                                onClick={() => { setPendingDecision("rejected"); setApprovalComment(""); }}
+                                type="button"
+                              >
+                                Rejeitar escopo
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <p className="text-sm text-neutral-500">Nenhum plano encontrado.</p>
+                        <p className="text-sm text-neutral-500">Nenhum plano encontrado para este projeto.</p>
                       )}
                     </div>
 
-                    <div className="rounded-md border border-neutral-200 bg-white p-4">
-                      <div className="mb-4 flex items-center justify-between gap-2">
+                    {/* Deployment card — prominent */}
+                    <div className={`rounded-md border p-4 ${selectedDeployment?.status === "ready" ? "border-teal-300 bg-teal-50" : "border-neutral-200 bg-white"}`}>
+                      <div className="mb-3 flex items-center justify-between gap-2">
                         <div>
-                          <h2 className="font-semibold">URL da implantacao</h2>
+                          <h2 className="font-semibold">Sua entrega</h2>
                           <p className="text-sm text-neutral-500">
-                            Projeto + implantacao ficam disponiveis quando a assinatura esta ativa.
+                            Acesse o projeto implantado pela sua assinatura.
                           </p>
                         </div>
-                        <Badge tone={selectedDeployment ? "green" : "neutral"}>
-                          {selectedDeployment?.status ?? "sem implantacao"}
+                        <Badge tone={selectedDeployment?.status === "ready" ? "green" : "neutral"}>
+                          {selectedDeployment?.status === "ready" ? "Disponível" : selectedDeployment?.status === "failed" ? "Falha" : "Aguardando"}
                         </Badge>
                       </div>
-                      {selectedDeployment ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Input readOnly value={selectedDeployment.url} />
+                      {selectedDeployment?.status === "ready" ? (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span className="flex-1 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-mono text-teal-800 truncate">
+                            {selectedDeployment.url}
+                          </span>
                           <a
-                            className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 bg-neutral-950 px-3 text-sm font-medium text-white transition hover:bg-neutral-800"
+                            className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-medium text-white transition hover:bg-teal-800"
                             href={selectedDeployment.url}
                             rel="noreferrer"
                             target="_blank"
                           >
-                            Abrir implantacao
+                            Acessar projeto →
                           </a>
                         </div>
                       ) : (
                         <p className="text-sm text-neutral-500">
-                          Conclua as etapas com o agente local para publicar a implantacao da assinatura.
+                          A URL estará disponível após a conclusão das etapas de entrega.
                         </p>
                       )}
                     </div>
+
+                    {/* Subscription card stub */}
+                    <div className="rounded-md border border-neutral-200 bg-white p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h2 className="font-semibold">Assinatura</h2>
+                        <Badge tone="green">Ativa</Badge>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3 text-sm">
+                        <div>
+                          <p className="text-neutral-500">Plano</p>
+                          <p className="font-medium">Desenvolvimento completo</p>
+                        </div>
+                        <div>
+                          <p className="text-neutral-500">Incluso</p>
+                          <p className="font-medium">Plano · Build · Deploy · Suporte</p>
+                        </div>
+                        <div>
+                          <p className="text-neutral-500">Alterações</p>
+                          <p className="font-medium">Ilimitadas via chat</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Project timeline */}
+                    {(() => {
+                      const projectApprovals = (approvalsQuery.data ?? []).filter(a => a.project === selectedProject.id);
+                      const projectMessages = (messagesQuery.data ?? []).filter(m => m.project === selectedProject.id);
+                      type TimelineEntry = { date: string; label: string; tone: "green" | "amber" | "neutral" | "red" };
+                      const events: TimelineEntry[] = [];
+                      if (selectedProject.created_at) events.push({ date: selectedProject.created_at, label: "Projeto criado", tone: "neutral" });
+                      if (selectedPlan?.status) events.push({ date: selectedProject.updated_at, label: "Plano gerado pelo time", tone: "neutral" });
+                      projectApprovals.forEach(a => events.push({
+                        date: a.created_at,
+                        label: a.decision === "approved" ? "Escopo aprovado" : a.decision === "rejected" ? "Escopo rejeitado" : "Mudanças solicitadas",
+                        tone: a.decision === "approved" ? "green" : a.decision === "rejected" ? "red" : "amber",
+                      }));
+                      projectMessages.filter(m => m.sender === "agent").forEach(m => events.push({ date: m.created_at, label: "Atualização do time", tone: "neutral" }));
+                      if (selectedDeployment?.status === "ready") events.push({ date: selectedDeployment.created_at, label: "Projeto implantado", tone: "green" });
+                      events.sort((a, b) => a.date < b.date ? -1 : 1);
+                      if (events.length === 0) return null;
+                      return (
+                        <div className="rounded-md border border-neutral-200 bg-white p-4">
+                          <h2 className="mb-4 font-semibold">Histórico de entregas</h2>
+                          <ol className="relative border-l border-neutral-200 space-y-4 ml-3">
+                            {events.map((ev, i) => (
+                              <li key={i} className="ml-4">
+                                <div className={`absolute -left-1.5 h-3 w-3 rounded-full border-2 border-white ${ev.tone === "green" ? "bg-teal-500" : ev.tone === "amber" ? "bg-amber-400" : ev.tone === "red" ? "bg-rose-500" : "bg-neutral-400"}`} />
+                                <p className="text-sm font-medium text-neutral-800">{ev.label}</p>
+                                <p className="text-xs text-neutral-400">{new Date(ev.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      );
+                    })()}
 
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between">

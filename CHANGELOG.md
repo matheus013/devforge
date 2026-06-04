@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- Client portal Phase 1: next-action banner per project tells the client exactly what to do next (highlighted in amber when urgent).
+- Client portal Phase 1: client-friendly status labels throughout — "Aguardando sua aprovação", "Em produção", "Implantado", etc. (no more raw technical strings like `waiting_approval`).
+- Client portal Phase 1: roadmap stages display human-readable labels ("A fazer", "Em andamento", "Concluído").
+- Client portal Phase 1: approval flow now requires a comment when requesting changes or rejecting scope — inline textarea appears before the decision is submitted; "Aprovar" remains one click.
+- Client portal Phase 1: prominent delivery card shows the deployment URL in teal with a direct "Acessar projeto →" button when the project is deployed.
+- Client portal Phase 1: subscription stub card showing plan name, included services, and change request allowance.
+- Client portal Phase 1: project timeline (Histórico de entregas) — chronological list of plan generation, approvals, agent updates, and deployment events.
+- Backend: `ApprovalSerializer` now validates that `comment` is non-empty when `decision` is `changes_requested` or `rejected` (returns HTTP 400 with a field-level error).
+
 ### Changed
 
 - Expanded `.gitignore` to cover Python artifacts (`*.egg-info`, `htmlcov`, `.coverage`, `celerybeat-schedule`), frontend build outputs (`out/`), logs (`*.log`), editor configs (`.vscode/`, `.idea/`), OS files (`Thumbs.db`), and secret file extensions (`*.pem`, `*.key`, `*.crt`, `*.p12`).
