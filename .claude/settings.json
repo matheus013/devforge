@@ -6,18 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash -c 'BRANCH=$(git branch --show-current 2>/dev/null); if [ \"$BRANCH\" = \"main\" ] || [ -z \"$BRANCH\" ]; then echo \"BLOQUEADO: Você está na branch \\\"$BRANCH\\\". Crie uma branch nova antes de editar qualquer arquivo. Use: git checkout -b codex/<nome>\"; exit 1; fi'"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'true'"
+            "command": "bash -c 'if ! command -v git >/dev/null 2>&1; then echo \"BLOQUEADO: git nao encontrado no PATH.\"; exit 2; fi; BRANCH=$(git branch --show-current 2>/dev/null); if [ \"$BRANCH\" = \"main\" ]; then echo \"BLOQUEADO: voce esta na branch main. Crie uma branch antes: git checkout -b codex/<nome>\"; exit 2; fi; if [ -z \"$BRANCH\" ]; then echo \"BLOQUEADO: HEAD destacado (detached HEAD) ou fora de um repositorio git. Crie ou selecione uma branch antes de editar arquivos.\"; exit 2; fi'"
           }
         ]
       }
@@ -26,8 +15,17 @@
   "permissions": {
     "allow": [
       "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(ssh-add *)"
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh auth *)",
+      "Bash(gh repo view*)",
+      "Bash(ssh-add *)",
+      "Bash(npm *)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(ruff *)",
+      "Bash(docker *)",
+      "WebFetch(domain:docs.anthropic.com)"
     ]
   }
 }
