@@ -9,6 +9,8 @@
 
 ### Documentation
 
+- Added `CLAUDE.md` with the mandatory 8-step development workflow enforced for Claude Code: branch → plan → implement → changelog → checks → PR → agent review → report.
+- Added `.claude/settings.json` with a `PreToolUse` hook that blocks edits on the `main` branch, preventing accidental direct commits.
 - Added project-level token usage monitoring to the product roadmap.
 - Added the DevForge AI development standard with mandatory branch, plan, changelog, PR, and agent-review workflow.
 - Added a pull request template for product impact, technical impact, checks, token accounting, and agent reviewer notes.
