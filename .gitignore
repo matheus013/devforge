@@ -1,13 +1,70 @@
-.DS_Store
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
 .venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+dist/
+*.spec
+
+# Django
 db.sqlite3
+*.sqlite3
+media/
+staticfiles/
+local_settings.py
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+nosetests.xml
+
+# Logs
+*.log
+logs/
+
+# Frontend
 node_modules/
 .next/
-dist/
+out/
 build/
+dist/
+
+# Environment
 .env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+*.override.yml
+
+# Secrets / keys
+*.pem
+*.key
+*.crt
+*.p12
