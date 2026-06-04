@@ -85,18 +85,21 @@ export type AgentRun = {
   created_at: string;
 };
 
+export type AgentRunner = "codex" | "claude-code";
+
 export type LocalAgent = {
   key: string;
   name: string;
   skill: string;
   role: string;
   mode: string;
-  provider: string;
+  runner: AgentRunner;
   enabled: boolean;
 };
 
 export type AgentRegistry = {
-  mode: string;
+  active_runner: AgentRunner;
+  allowed_runners: AgentRunner[];
   agents: LocalAgent[];
 };
 

@@ -106,9 +106,11 @@ def test_local_agent_registry_is_available_to_authenticated_users():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["mode"] == "codex_local"
+    assert payload["active_runner"] in ["codex", "claude-code"]
+    assert set(payload["allowed_runners"]) == {"codex", "claude-code"}
     assert {agent["skill"] for agent in payload["agents"]} >= {
         "codex-local-operator",
+        "claude-code-local-operator",
         "change-request-refiner",
         "project-planner",
         "complexity-classifier",

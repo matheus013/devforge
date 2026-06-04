@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.agents.registry import ALLOWED_RUNNERS
+
 from .models import AgentRun
 
 
@@ -28,7 +30,12 @@ class AgentRunSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "created_at"]
 
 
-class CodexHandoffSerializer(serializers.Serializer):
+class AgentHandoffSerializer(serializers.Serializer):
     project = serializers.PrimaryKeyRelatedField(read_only=True)
     project_id = serializers.IntegerField(write_only=True)
     objective = serializers.CharField(min_length=8, max_length=1000)
+    runner = serializers.ChoiceField(choices=ALLOWED_RUNNERS, default="codex")
+
+
+# Backward-compatible alias used by existing endpoints
+CodexHandoffSerializer = AgentHandoffSerializer

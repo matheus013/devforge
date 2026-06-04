@@ -27,8 +27,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, apiFetch, apiRequest } from "@/services/api";
 import type {
-  AgentRun,
   AgentRegistry,
+  AgentRun,
+  AgentRunner,
   Deployment,
   Organization,
   Project,
@@ -100,7 +101,8 @@ function statusTone(status?: string): "neutral" | "green" | "amber" | "red" {
     status === "waiting_approval" ||
     status === "planning" ||
     status === "in_progress" ||
-    status === "pending_codex"
+    status === "pending_codex" ||
+    status === "pending_claude_code"
   ) {
     return "amber";
   }
@@ -200,6 +202,7 @@ export default function Home() {
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [messageBody, setMessageBody] = useState("");
   const [notice, setNotice] = useState("");
+  const [selectedRunner, setSelectedRunner] = useState<AgentRunner>("codex");
 
   useEffect(() => {
     setToken(localStorage.getItem(tokenKey) ?? "");
@@ -476,18 +479,20 @@ export default function Home() {
 
   const codexMutation = useMutation({
     mutationFn: (values: z.infer<typeof codexSchema>) =>
-      apiRequest<AgentRun>("/agent-runs/request-codex/", token, {
+      apiRequest<AgentRun>("/agent-runs/request-agent/", token, {
         method: "POST",
         body: JSON.stringify({
           project_id: selectedProject?.id,
           objective: values.objective,
+          runner: selectedRunner,
         }),
       }),
     onSuccess: async () => {
       codexForm.reset({
         objective: "Analise este projeto e proponha o proximo passo operacional.",
       });
-      setNotice("Solicitacao enviada para o Codex local e registrada em AgentRun.");
+      const label = selectedRunner === "claude-code" ? "Claude Code" : "Codex";
+      setNotice(`Solicitacao enviada para o ${label} local e registrada em AgentRun.`);
       await invalidateWorkspace();
     },
   });
@@ -499,13 +504,15 @@ export default function Home() {
         body: JSON.stringify({
           project_id: selectedProject?.id,
           objective: values.objective,
+          runner: selectedRunner,
         }),
       }),
     onSuccess: async () => {
       codexForm.reset({
         objective: "Analise este projeto e proponha o proximo passo operacional.",
       });
-      setNotice("Codex local resolveu o projeto e criou a fila operacional.");
+      const label = selectedRunner === "claude-code" ? "Claude Code" : "Codex";
+      setNotice(`${label} local resolveu o projeto e criou a fila operacional.`);
       await invalidateWorkspace();
     },
   });
@@ -710,7 +717,7 @@ export default function Home() {
                   ["Organizacoes", String(organizations.length), "tenants"],
                   ["Projetos", String(projects.length), "todos"],
                   ["AgentRuns", String(allAgentRuns.length), "auditados"],
-                  ["Pendentes", String(allAgentRuns.filter((run) => run.status === "pending_codex").length), "Codex"],
+                  ["Pendentes", String(allAgentRuns.filter((run) => run.status === "pending_codex" || run.status === "pending_claude_code").length), "agentes"],
                   ["Implantacoes", String(allDeployments.length), "assinaturas"],
                 ].map(([label, value, meta]) => (
                   <div key={label} className="rounded-md border border-neutral-200 bg-white p-4">
@@ -875,14 +882,25 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="rounded-md border border-neutral-200 bg-white p-4">
-                  <h2 className="mb-3 font-semibold">Fila Codex</h2>
+                  <h2 className="mb-3 font-semibold">Fila de agentes locais</h2>
                   <div className="space-y-2 text-sm">
-                    {allAgentRuns.filter((run) => run.skill === "codex-local-operator").slice(0, 8).map((run) => (
-                      <div key={run.id} className="flex items-center justify-between gap-2">
-                        <span className="truncate">{projectNameById.get(run.project) ?? run.project}</span>
-                        <Badge tone={statusTone(run.status)}>{run.status}</Badge>
-                      </div>
-                    ))}
+                    {allAgentRuns
+                      .filter((run) =>
+                        run.skill === "codex-local-operator" ||
+                        run.skill === "claude-code-local-operator",
+                      )
+                      .slice(0, 8)
+                      .map((run) => (
+                        <div key={run.id} className="flex items-center justify-between gap-2">
+                          <span className="truncate">{projectNameById.get(run.project) ?? run.project}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-neutral-400">
+                              {run.skill === "claude-code-local-operator" ? "claude-code" : "codex"}
+                            </span>
+                            <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                          </div>
+                        </div>
+                      ))}
                   </div>
                 </div>
                 <div className="rounded-md border border-neutral-200 bg-white p-4">
@@ -917,7 +935,7 @@ export default function Home() {
                     ["Projetos", String(projects.length), "privados"],
                     ["Planos", String((plansQuery.data ?? []).length), "gerados"],
                     ["Tickets", String((ticketsQuery.data ?? []).length), "abertos"],
-                    ["Agentes locais", String(agentRegistryQuery.data?.agents.length ?? 0), "local-codex"],
+                    ["Agentes locais", String(agentRegistryQuery.data?.agents.length ?? 0), agentRegistryQuery.data?.active_runner ?? "local"],
                   ].map(([label, value, meta]) => (
                     <div key={label} className="rounded-md border border-neutral-200 bg-white p-4">
                       <p className="text-sm text-neutral-500">{label}</p>
@@ -937,7 +955,7 @@ export default function Home() {
                         Agentes deterministicos rodando no backend local, sempre auditados em AgentRun.
                       </p>
                     </div>
-                    <Badge tone="green">{agentRegistryQuery.data?.mode ?? "local"}</Badge>
+                    <Badge tone="green">{agentRegistryQuery.data?.active_runner ?? "local"}</Badge>
                   </div>
                   <div className="grid gap-3 md:grid-cols-4">
                     {(agentRegistryQuery.data?.agents ?? []).map((agent) => {
@@ -955,7 +973,7 @@ export default function Home() {
                           </div>
                           <p className="min-h-12 text-xs text-neutral-600">{agent.role}</p>
                           <div className="mt-3 flex flex-wrap gap-2 text-xs text-neutral-500">
-                            <span>{agent.provider}</span>
+                            <span>{agent.runner}</span>
                             <span>{agent.mode}</span>
                           </div>
                         </div>
@@ -1130,7 +1148,7 @@ export default function Home() {
                         </div>
                       ) : (
                         <p className="text-sm text-neutral-500">
-                          Conclua as etapas com o Codex local para publicar a implantacao da assinatura.
+                          Conclua as etapas com o agente local para publicar a implantacao da assinatura.
                         </p>
                       )}
                     </div>
@@ -1164,25 +1182,43 @@ export default function Home() {
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
-                          <h2 className="font-semibold">Acionar Codex local</h2>
+                          <h2 className="font-semibold">Acionar agente local</h2>
                           <p className="text-sm text-neutral-500">
-                            Cria um AgentRun pendente para eu atuar neste workspace.
+                            Cria um AgentRun pendente para o agente atuar neste workspace.
                           </p>
                         </div>
                         <Badge tone="amber">human-in-loop</Badge>
                       </div>
+
+                      <div className="mb-4 flex gap-2">
+                        {(["codex", "claude-code"] as AgentRunner[]).map((runner) => (
+                          <button
+                            key={runner}
+                            type="button"
+                            onClick={() => setSelectedRunner(runner)}
+                            className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
+                              selectedRunner === runner
+                                ? "border-neutral-900 bg-neutral-900 text-white"
+                                : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500"
+                            }`}
+                          >
+                            {runner === "codex" ? "Codex" : "Claude Code"}
+                          </button>
+                        ))}
+                      </div>
+
                       <form
                         className="space-y-3"
                         onSubmit={codexForm.handleSubmit((data) => codexMutation.mutate(data))}
                       >
                         <textarea
                           className="min-h-24 w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-neutral-900"
-                          placeholder="O que o Codex deve fazer neste projeto?"
+                          placeholder={`O que o ${selectedRunner === "claude-code" ? "Claude Code" : "Codex"} deve fazer neste projeto?`}
                           {...codexForm.register("objective")}
                         />
                         {codexMutation.error || resolveCodexMutation.error ? (
                           <p className="text-sm text-rose-700">
-                            Nao foi possivel acionar o Codex local.
+                            Nao foi possivel acionar o agente local.
                           </p>
                         ) : null}
                         <div className="flex flex-wrap gap-2">
