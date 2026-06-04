@@ -1,0 +1,111 @@
+name: devforge_ai
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "5m"
+    max-file: "2"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    logging: *default-logging
+    environment:
+      POSTGRES_DB: devforge
+      POSTGRES_USER: devforge
+      POSTGRES_PASSWORD: devforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devforge -d devforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    logging: *default-logging
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio:latest
+    logging: *default-logging
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: devforge
+      MINIO_ROOT_PASSWORD: devforge123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  gitea:
+    image: gitea/gitea:1.22
+    logging: *default-logging
+    ports:
+      - "3001:3000"
+      - "2222:22"
+    volumes:
+      - gitea_data:/data
+
+  backend:
+    build: ./backend
+    logging: *default-logging
+    command: sh -c "python manage.py migrate --noinput && python manage.py seed_demo && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --timeout 120"
+    environment:
+      DJANGO_SECRET_KEY: devforge-local-dev-secret-for-jwt-hs256-please-change
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: devforge
+      POSTGRES_USER: devforge
+      POSTGRES_PASSWORD: devforge
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      DEVFORGE_AGENT_MODE: codex_operator
+      DEVFORGE_AGENT_PROVIDER: codex-local-operator
+      DEVFORGE_FRONTEND_URL: http://localhost:3000
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery:
+    build: ./backend
+    logging: *default-logging
+    command: celery -A config worker -l info
+    environment:
+      DJANGO_SECRET_KEY: devforge-local-dev-secret-for-jwt-hs256-please-change
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: devforge
+      POSTGRES_USER: devforge
+      POSTGRES_PASSWORD: devforge
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      DEVFORGE_AGENT_MODE: codex_operator
+      DEVFORGE_AGENT_PROVIDER: codex-local-operator
+      DEVFORGE_FRONTEND_URL: http://localhost:3000
+    depends_on:
+      - backend
+      - redis
+
+  frontend:
+    build: ./frontend
+    logging: *default-logging
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  minio_data:
+  gitea_data:
