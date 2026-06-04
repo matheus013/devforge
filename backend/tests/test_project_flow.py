@@ -266,6 +266,109 @@ def test_client_change_request_is_immutable_and_tenant_scoped():
 
 
 @pytest.mark.django_db
+def test_request_agent_endpoint_routes_to_codex():
+    user = get_user_model().objects.create_user(
+        email="ra-codex@test.com", username="racodex", password="password123"
+    )
+    org = Organization.objects.create(name="RA Codex Org", slug="ra-codex-org")
+    OrganizationMember.objects.create(organization=org, user=user, role="owner")
+    project = create_project_with_plan(
+        user=user, organization=org, name="RA Codex Build", type=Project.Type.NEW_BUILD
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/agent-runs/request-agent/",
+        {"project_id": project.id, "objective": "Revisar backlog inicial.", "runner": "codex"},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["skill"] == "codex-local-operator"
+    assert payload["status"] == "pending_codex"
+    assert payload["project"] == project.id
+
+
+@pytest.mark.django_db
+def test_request_agent_endpoint_routes_to_claude_code():
+    user = get_user_model().objects.create_user(
+        email="ra-cc@test.com", username="racclaude", password="password123"
+    )
+    org = Organization.objects.create(name="RA CC Org", slug="ra-cc-org")
+    OrganizationMember.objects.create(organization=org, user=user, role="owner")
+    project = create_project_with_plan(
+        user=user, organization=org, name="RA CC Build", type=Project.Type.NEW_BUILD
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/agent-runs/request-agent/",
+        {"project_id": project.id, "objective": "Revisar backlog inicial.", "runner": "claude-code"},  # noqa: E501
+        format="json",
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["skill"] == "claude-code-local-operator"
+    assert payload["status"] == "pending_claude_code"
+    assert payload["project"] == project.id
+
+
+@pytest.mark.django_db
+def test_request_agent_rejects_invalid_runner():
+    user = get_user_model().objects.create_user(
+        email="ra-invalid@test.com", username="rainvalid", password="password123"
+    )
+    org = Organization.objects.create(name="RA Invalid Org", slug="ra-invalid-org")
+    OrganizationMember.objects.create(organization=org, user=user, role="owner")
+    project = create_project_with_plan(
+        user=user, organization=org, name="RA Invalid Build", type=Project.Type.NEW_BUILD
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/agent-runs/request-agent/",
+        {"project_id": project.id, "objective": "Revisar backlog.", "runner": "openai"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_request_agent_cannot_target_another_orgs_project():
+    user_model = get_user_model()
+    owner = user_model.objects.create_user(
+        email="owner-ra@test.com", username="ownerra", password="password123"
+    )
+    attacker = user_model.objects.create_user(
+        email="attacker-ra@test.com", username="attackerra", password="password123"
+    )
+    org = Organization.objects.create(name="Owner Org RA", slug="owner-org-ra")
+    other_org = Organization.objects.create(name="Attacker Org RA", slug="attacker-org-ra")
+    OrganizationMember.objects.create(organization=org, user=owner, role="owner")
+    OrganizationMember.objects.create(organization=other_org, user=attacker, role="owner")
+
+    project = create_project_with_plan(
+        user=owner, organization=org, name="Owner Build RA", type=Project.Type.NEW_BUILD
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=attacker)
+    response = client.post(
+        "/api/agent-runs/request-agent/",
+        {"project_id": project.id, "objective": "Tentativa de acesso cruzado.", "runner": "codex"},
+        format="json",
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
 def test_urgent_change_request_keeps_refined_change_ticket():
     user = get_user_model().objects.create_user(
         email="urgent@test.com", username="urgent", password="password123"

@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 
-from apps.agents.registry import active_runner, configured_agents
+from apps.agents.registry import ALLOWED_RUNNERS, active_runner, configured_agents
 from apps.agents.services.claude_code_handoff import (
     request_claude_code_handoff,
     resolve_project_with_claude_code,
@@ -36,7 +36,7 @@ class AgentRunViewSet(viewsets.ReadOnlyModelViewSet):
     def registry(self, request):
         return Response({
             "active_runner": active_runner(),
-            "allowed_runners": ["codex", "claude-code"],
+            "allowed_runners": ALLOWED_RUNNERS,
             "agents": configured_agents(),
         })
 

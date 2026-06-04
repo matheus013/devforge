@@ -9,6 +9,7 @@ from apps.projects.models import Project, ProjectMessage, ProjectStage
 from apps.tickets.models import Ticket
 
 
+@transaction.atomic
 def request_claude_code_handoff(*, project, objective: str, requested_by) -> AgentRun:
     return AgentRun.objects.create(
         organization=project.organization,

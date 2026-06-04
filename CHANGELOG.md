@@ -5,7 +5,8 @@
 ### Added
 
 - Added Claude Code as a local agent runner option alongside Codex. The UI now shows a Codex / Claude Code selector in the "Acionar agente local" panel. Both runners create auditable `AgentRun` records and support the full handoff and resolve-project flows.
-- Added `DEVFORGE_AGENT_RUNNER` env var (values: `codex` or `claude-code`) validated at startup — the app rejects any other value.
+- Added `DEVFORGE_AGENT_RUNNER` env var (values: `codex` or `claude-code`) validated at startup — invalid values raise a `ValueError` on import.
+- Added tests: `/request-agent/` with both runners, invalid runner rejection (400), and cross-tenant isolation (404 when targeting another org's project).
 - Added `/api/agent-runs/request-agent/` endpoint accepting a `runner` field; the old `/request-codex/` endpoint is kept for backward compatibility.
 - Added `active_runner` and `allowed_runners` fields to the `/api/agent-runs/registry/` response.
 

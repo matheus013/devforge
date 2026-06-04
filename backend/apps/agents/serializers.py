@@ -35,7 +35,3 @@ class AgentHandoffSerializer(serializers.Serializer):
     project_id = serializers.IntegerField(write_only=True)
     objective = serializers.CharField(min_length=8, max_length=1000)
     runner = serializers.ChoiceField(choices=ALLOWED_RUNNERS, default="codex")
-
-
-# Backward-compatible alias used by existing endpoints
-CodexHandoffSerializer = AgentHandoffSerializer
