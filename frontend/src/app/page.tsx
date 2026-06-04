@@ -144,7 +144,7 @@ function clientNextAction(status?: string): { text: string; urgent: boolean } {
     case "active": return { text: "Projeto em produção — acompanhe o roadmap abaixo", urgent: false };
     case "blocked": return { text: "Ajustes em análise pelo time", urgent: false };
     case "exported": return { text: "Projeto implantado — acesse sua entrega abaixo", urgent: false };
-    default: return { text: "Selecione um projeto para ver o status", urgent: false };
+    default: return { text: "Entre em contato com o time para mais informações", urgent: false };
   }
 }
 
@@ -582,6 +582,9 @@ export default function Home() {
       setApprovalComment("");
       setNotice("Decisão registrada com sucesso.");
       await invalidateWorkspace();
+    },
+    onError: () => {
+      setNotice("Não foi possível registrar a decisão. Tente novamente.");
     },
   });
 
@@ -1089,7 +1092,12 @@ export default function Home() {
                                 ? "border-neutral-950 bg-neutral-50"
                                 : "border-neutral-200 bg-white hover:border-neutral-400"
                             }`}
-                            onClick={() => setSelectedProjectId(project.id)}
+                            onClick={() => {
+                              setSelectedProjectId(project.id);
+                              setPendingDecision(null);
+                              setApprovalComment("");
+                              approveMutation.reset();
+                            }}
                             type="button"
                           >
                             <div className="flex items-center justify-between gap-2">
@@ -1199,15 +1207,15 @@ export default function Home() {
                               ) : null}
                               <div className="flex gap-2">
                                 <Button
-                                  disabled={approveMutation.isPending || !approvalComment.trim()}
-                                  onClick={() => approveMutation.mutate({ decision: pendingDecision, comment: approvalComment })}
+                                  disabled={approveMutation.isPending || !approvalComment.trim() || !selectedProject || !selectedPlan}
+                                  onClick={() => approveMutation.mutate({ decision: pendingDecision!, comment: approvalComment })}
                                   type="button"
                                 >
                                   Confirmar
                                 </Button>
                                 <Button
                                   className="bg-white text-neutral-900"
-                                  onClick={() => { setPendingDecision(null); setApprovalComment(""); }}
+                                  onClick={() => { setPendingDecision(null); setApprovalComment(""); approveMutation.reset(); }}
                                   type="button"
                                 >
                                   Cancelar
@@ -1217,7 +1225,7 @@ export default function Home() {
                           ) : (
                             <div className="flex flex-wrap gap-2">
                               <Button
-                                disabled={approveMutation.isPending}
+                                disabled={approveMutation.isPending || !selectedProject || !selectedPlan}
                                 onClick={() => approveMutation.mutate({ decision: "approved", comment: "" })}
                                 type="button"
                               >
@@ -1226,16 +1234,16 @@ export default function Home() {
                               </Button>
                               <Button
                                 className="bg-white text-neutral-900"
-                                disabled={approveMutation.isPending}
-                                onClick={() => { setPendingDecision("changes_requested"); setApprovalComment(""); }}
+                                disabled={approveMutation.isPending || !selectedProject || !selectedPlan}
+                                onClick={() => { setPendingDecision("changes_requested"); setApprovalComment(""); approveMutation.reset(); }}
                                 type="button"
                               >
                                 Solicitar mudanças
                               </Button>
                               <Button
                                 className="bg-white text-neutral-900"
-                                disabled={approveMutation.isPending}
-                                onClick={() => { setPendingDecision("rejected"); setApprovalComment(""); }}
+                                disabled={approveMutation.isPending || !selectedProject || !selectedPlan}
+                                onClick={() => { setPendingDecision("rejected"); setApprovalComment(""); approveMutation.reset(); }}
                                 type="button"
                               >
                                 Rejeitar escopo
@@ -1282,26 +1290,15 @@ export default function Home() {
                       )}
                     </div>
 
-                    {/* Subscription card stub */}
+                    {/* Subscription card — placeholder until Phase 4 subscription model */}
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-3 flex items-center justify-between">
                         <h2 className="font-semibold">Assinatura</h2>
-                        <Badge tone="green">Ativa</Badge>
+                        <Badge tone="neutral">Em breve</Badge>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-3 text-sm">
-                        <div>
-                          <p className="text-neutral-500">Plano</p>
-                          <p className="font-medium">Desenvolvimento completo</p>
-                        </div>
-                        <div>
-                          <p className="text-neutral-500">Incluso</p>
-                          <p className="font-medium">Plano · Build · Deploy · Suporte</p>
-                        </div>
-                        <div>
-                          <p className="text-neutral-500">Alterações</p>
-                          <p className="font-medium">Ilimitadas via chat</p>
-                        </div>
-                      </div>
+                      <p className="text-sm text-neutral-500">
+                        Os detalhes da sua assinatura, plano e limites de alterações estarão disponíveis em breve. Entre em contato com o time para informações sobre o seu plano atual.
+                      </p>
                     </div>
 
                     {/* Project timeline */}
@@ -1311,7 +1308,7 @@ export default function Home() {
                       type TimelineEntry = { date: string; label: string; tone: "green" | "amber" | "neutral" | "red" };
                       const events: TimelineEntry[] = [];
                       if (selectedProject.created_at) events.push({ date: selectedProject.created_at, label: "Projeto criado", tone: "neutral" });
-                      if (selectedPlan?.status) events.push({ date: selectedProject.updated_at, label: "Plano gerado pelo time", tone: "neutral" });
+                      if (selectedPlan?.created_at) events.push({ date: selectedPlan.created_at, label: "Plano gerado pelo time", tone: "neutral" });
                       projectApprovals.forEach(a => events.push({
                         date: a.created_at,
                         label: a.decision === "approved" ? "Escopo aprovado" : a.decision === "rejected" ? "Escopo rejeitado" : "Mudanças solicitadas",
@@ -1325,8 +1322,8 @@ export default function Home() {
                         <div className="rounded-md border border-neutral-200 bg-white p-4">
                           <h2 className="mb-4 font-semibold">Histórico de entregas</h2>
                           <ol className="relative border-l border-neutral-200 space-y-4 ml-3">
-                            {events.map((ev, i) => (
-                              <li key={i} className="ml-4">
+                            {events.map((ev) => (
+                              <li key={ev.date + ev.label} className="ml-4">
                                 <div className={`absolute -left-1.5 h-3 w-3 rounded-full border-2 border-white ${ev.tone === "green" ? "bg-teal-500" : ev.tone === "amber" ? "bg-amber-400" : ev.tone === "red" ? "bg-rose-500" : "bg-neutral-400"}`} />
                                 <p className="text-sm font-medium text-neutral-800">{ev.label}</p>
                                 <p className="text-xs text-neutral-400">{new Date(ev.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}</p>
