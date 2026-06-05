@@ -245,6 +245,8 @@ export default function Home() {
   const [pendingDecision, setPendingDecision] = useState<"changes_requested" | "rejected" | null>(null);
   const [approvalComment, setApprovalComment] = useState("");
   const [activeSection, setActiveSection] = useState("Projetos");
+  const [runFilter, setRunFilter] = useState({ skill: "", status: "" });
+  const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
 
   useEffect(() => {
     setToken(localStorage.getItem(tokenKey) ?? "");
@@ -587,6 +589,19 @@ export default function Home() {
     onError: () => {
       setNotice("Não foi possível registrar a decisão. Tente novamente.");
     },
+  });
+
+  const setDeploymentStatusMutation = useMutation({
+    mutationFn: ({ id, status: newStatus }: { id: number; status: string }) =>
+      apiRequest<Deployment>(`/deployments/${id}/set-status/`, token, {
+        method: "POST",
+        body: JSON.stringify({ status: newStatus }),
+      }),
+    onSuccess: async () => {
+      setNotice("Status da implantação atualizado.");
+      await invalidateWorkspace();
+    },
+    onError: () => setNotice("Não foi possível alterar o status."),
   });
 
   const logout = () => {
@@ -985,6 +1000,234 @@ export default function Home() {
                 </div>
               </div>
             </section>
+          ) : null}
+
+          {/* Admin — Team queue (Dashboard only) */}
+          {isTeam && activeSection === "Dashboard" ? (() => {
+            const waitingApproval = projects.filter(p => p.status === "waiting_approval");
+            const pendingRuns = allAgentRuns.filter(r => r.status === "pending_codex" || r.status === "pending_claude_code");
+            const failedDeployments = allDeployments.filter(d => d.status === "failed");
+            const highTickets = allTickets.filter(t => t.priority === "high" && t.status !== "resolved");
+            const queueItems = [
+              ...waitingApproval.map(p => ({ type: "approval", label: `${p.name} aguarda aprovação`, projectId: p.id, tone: "amber" as const })),
+              ...pendingRuns.map(r => ({ type: "agent", label: `${projectNameById.get(r.project) ?? "Projeto"} — ${r.skill} pendente`, projectId: r.project, tone: "amber" as const })),
+              ...failedDeployments.map(d => ({ type: "deployment", label: `Implantação falhou: ${projectNameById.get(d.project) ?? "Projeto"}`, projectId: d.project, tone: "red" as const })),
+              ...highTickets.slice(0, 3).map(t => ({ type: "ticket", label: `Alta prioridade: ${t.title}`, projectId: t.project, tone: "red" as const })),
+            ];
+            if (queueItems.length === 0) return null;
+            return (
+              <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="font-semibold text-amber-900">Fila de atenção</h2>
+                  <Badge tone="amber">{queueItems.length} itens</Badge>
+                </div>
+                <div className="space-y-2">
+                  {queueItems.map((item, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2 text-sm">
+                      <span className={item.tone === "red" ? "text-rose-700" : "text-amber-800"}>{item.label}</span>
+                      <button
+                        className="text-xs font-medium text-neutral-500 underline"
+                        onClick={() => { setSelectedProjectId(item.projectId); setActiveSection("Projetos"); }}
+                        type="button"
+                      >
+                        Ver projeto
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })() : null}
+
+          {/* Admin — Agent Runs monitor */}
+          {isTeam && activeSection === "Agent Runs" ? (
+            <div className="mb-5 space-y-5">
+              {/* Token ledger by project */}
+              <div className="rounded-md border border-neutral-200 bg-white p-4">
+                <h2 className="mb-4 font-semibold">Custo por projeto</h2>
+                {(() => {
+                  const byProject = new Map<number, { tokens: number; cost: number; runs: number }>();
+                  allAgentRuns.forEach(r => {
+                    const existing = byProject.get(r.project) ?? { tokens: 0, cost: 0, runs: 0 };
+                    byProject.set(r.project, {
+                      tokens: existing.tokens + (r.total_tokens ?? 0),
+                      cost: existing.cost + Number(r.estimated_cost ?? 0),
+                      runs: existing.runs + 1,
+                    });
+                  });
+                  const rows = Array.from(byProject.entries())
+                    .sort((a, b) => b[1].cost - a[1].cost)
+                    .slice(0, 10);
+                  if (rows.length === 0) return <p className="text-sm text-neutral-500">Nenhuma execução registrada.</p>;
+                  return (
+                    <table className="w-full text-left text-sm">
+                      <thead className="text-xs text-neutral-500">
+                        <tr>
+                          <th className="pb-2 pr-4">Projeto</th>
+                          <th className="pb-2 pr-4">Execuções</th>
+                          <th className="pb-2 pr-4">Tokens totais</th>
+                          <th className="pb-2">Custo estimado</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rows.map(([projectId, data]) => (
+                          <tr key={projectId} className="border-t border-neutral-100">
+                            <td className="py-2 pr-4 font-medium">{projectNameById.get(projectId) ?? projectId}</td>
+                            <td className="py-2 pr-4 text-neutral-600">{data.runs}</td>
+                            <td className="py-2 pr-4 text-neutral-600">{data.tokens.toLocaleString("pt-BR")}</td>
+                            <td className="py-2 text-neutral-600">${data.cost.toFixed(4)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
+
+              {/* Full agent run monitor with filters */}
+              <div className="rounded-md border border-neutral-200 bg-white p-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold">Monitor de execuções</h2>
+                    <p className="text-sm text-neutral-500">Inputs, outputs, logs e custos de cada execução.</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <select
+                      className="h-8 rounded-md border border-neutral-300 bg-white px-2 text-xs"
+                      value={runFilter.skill}
+                      onChange={e => setRunFilter(f => ({ ...f, skill: e.target.value }))}
+                    >
+                      <option value="">Todos os agentes</option>
+                      {Array.from(new Set(allAgentRuns.map(r => r.skill))).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                    <select
+                      className="h-8 rounded-md border border-neutral-300 bg-white px-2 text-xs"
+                      value={runFilter.status}
+                      onChange={e => setRunFilter(f => ({ ...f, status: e.target.value }))}
+                    >
+                      <option value="">Todos os status</option>
+                      {Array.from(new Set(allAgentRuns.map(r => r.status))).map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="max-h-[600px] space-y-3 overflow-auto">
+                  {allAgentRuns
+                    .filter(r => (!runFilter.skill || r.skill === runFilter.skill) && (!runFilter.status || r.status === runFilter.status))
+                    .map(run => {
+                      const proj = projectById.get(run.project);
+                      const isExpanded = expandedRunId === run.id;
+                      return (
+                        <div key={run.id} className="rounded-md border border-neutral-200">
+                          <button
+                            className="flex w-full items-start justify-between gap-3 p-3 text-left"
+                            onClick={() => setExpandedRunId(isExpanded ? null : run.id)}
+                            type="button"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{run.skill}</p>
+                              <p className="text-xs text-neutral-500">
+                                {projectNameById.get(run.project) ?? run.project}
+                                {proj ? ` · ${orgNameById.get(proj.organization) ?? "org"}` : ""}
+                                {" · "}
+                                {new Date(run.created_at).toLocaleDateString("pt-BR")}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {run.total_tokens > 0 && <span className="text-xs text-neutral-400">{run.total_tokens.toLocaleString("pt-BR")} tok</span>}
+                              <span className="text-xs text-neutral-400">${Number(run.estimated_cost).toFixed(4)}</span>
+                              <Badge tone={statusTone(run.status)}>{run.status}</Badge>
+                            </div>
+                          </button>
+                          {isExpanded ? (
+                            <div className="border-t border-neutral-100 p-3">
+                              <div className="grid gap-3 text-xs lg:grid-cols-2">
+                                <div>
+                                  <p className="mb-1 font-medium text-neutral-700">Input</p>
+                                  <pre className="max-h-40 overflow-auto rounded bg-neutral-100 p-2 text-neutral-600 whitespace-pre-wrap">{promptText(run)}</pre>
+                                </div>
+                                <div>
+                                  <p className="mb-1 font-medium text-neutral-700">Output</p>
+                                  <pre className="max-h-40 overflow-auto rounded bg-neutral-100 p-2 text-neutral-600 whitespace-pre-wrap">{outputText(run)}</pre>
+                                </div>
+                              </div>
+                              {run.logs.length > 0 && (
+                                <div className="mt-2">
+                                  <p className="mb-1 text-xs font-medium text-neutral-700">Logs</p>
+                                  <div className="space-y-1">
+                                    {run.logs.map((log, i) => (
+                                      <p key={i} className="rounded bg-neutral-100 px-2 py-1 text-xs text-neutral-600">{log}</p>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <div className="mt-2 flex flex-wrap gap-3 text-xs text-neutral-500">
+                                <span>Tokens: {run.input_tokens} in / {run.output_tokens} out / {run.total_tokens} total</span>
+                                <span>Fonte: {run.token_usage_source}</span>
+                                <span>Custo: ${Number(run.estimated_cost).toFixed(6)} {run.currency}</span>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Admin — Deployment management */}
+          {isTeam && activeSection === "Exportacoes" ? (
+            <div className="mb-5 rounded-md border border-neutral-200 bg-white p-4">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold">Gestão de implantações</h2>
+                  <p className="text-sm text-neutral-500">Ative, desative ou marque falhas nas implantações dos clientes.</p>
+                </div>
+                <Badge tone="neutral">{allDeployments.length}</Badge>
+              </div>
+              {allDeployments.length === 0 ? (
+                <p className="text-sm text-neutral-500">Nenhuma implantação ainda.</p>
+              ) : (
+                <div className="space-y-3">
+                  {allDeployments.map(d => (
+                    <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-200 p-3">
+                      <div className="min-w-0">
+                        <p className="truncate font-medium text-sm">{projectNameById.get(d.project) ?? d.project}</p>
+                        <p className="truncate text-xs text-neutral-500">{d.url}</p>
+                        {d.notes ? <p className="mt-1 text-xs text-neutral-400">{d.notes}</p> : null}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge tone={d.status === "ready" ? "green" : d.status === "failed" ? "red" : "neutral"}>{d.status}</Badge>
+                        {d.status === "ready" ? (
+                          <Button
+                            className="h-7 bg-white px-2 text-xs text-rose-700"
+                            disabled={setDeploymentStatusMutation.isPending}
+                            onClick={() => setDeploymentStatusMutation.mutate({ id: d.id, status: "disabled" })}
+                            type="button"
+                          >
+                            Desativar
+                          </Button>
+                        ) : (
+                          <Button
+                            className="h-7 px-2 text-xs"
+                            disabled={setDeploymentStatusMutation.isPending}
+                            onClick={() => setDeploymentStatusMutation.mutate({ id: d.id, status: "ready" })}
+                            type="button"
+                          >
+                            Ativar
+                          </Button>
+                        )}
+                        <a href={d.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-teal-700 hover:underline">abrir</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : null}
 
           {activeOrg && !isTeam && activeSection === "Dashboard" ? (

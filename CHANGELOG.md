@@ -4,6 +4,12 @@
 
 ### Added
 
+- Phase 2 admin cockpit — team queue on Dashboard: shows projects waiting approval, pending agent runs, failed deployments, and high-priority tickets; each item links to the relevant project.
+- Phase 2 admin cockpit — agent run monitor on "Agent Runs": filter by skill and status; expandable rows show full input/output JSON, logs, and token breakdown (in/out/total, source, cost); token ledger table shows cost and tokens per project.
+- Phase 2 admin cockpit — deployment management on "Exportacoes": admin can activate or disable each deployment with a button (calls new `POST /api/deployments/{id}/set-status/` endpoint).
+- Backend: `DeploymentViewSet.set_status` action — admin/staff can set deployment status to `ready`, `disabled`, or `failed` via `POST /api/deployments/{id}/set-status/`.
+- Updated `docs/product-roadmap.md`: Phase 0 and Phase 1 marked as complete with delivered items.
+
 - Sidebar navigation now works: clicking each item shows the corresponding section (Dashboard, Projetos, Mensagens, Tickets, Agent Runs, Exportacoes) with active highlight on the selected button.
 - Client Dashboard section: summary cards (active projects, waiting approval, deployed) + project list with status labels, next-action text, and direct "Acessar →" deployment button. Clicking "Ver detalhes" navigates to the project in Projetos.
 - Sections are now isolated: Mensagens is full-width messages; Tickets is full-width tickets; Agent Runs shows the agent panel + workforce; Exportacoes shows the import section; Projetos shows create form + list + detail.
