@@ -4,6 +4,10 @@
 
 ### Added
 
+- Sidebar navigation now works: clicking each item shows the corresponding section (Dashboard, Projetos, Mensagens, Tickets, Agent Runs, Exportacoes) with active highlight on the selected button.
+- Client Dashboard section: summary cards (active projects, waiting approval, deployed) + project list with status labels, next-action text, and direct "Acessar →" deployment button. Clicking "Ver detalhes" navigates to the project in Projetos.
+- Sections are now isolated: Mensagens is full-width messages; Tickets is full-width tickets; Agent Runs shows the agent panel + workforce; Exportacoes shows the import section; Projetos shows create form + list + detail.
+
 - Client portal Phase 1: next-action banner per project tells the client exactly what to do next (highlighted in amber when urgent).
 - Client portal Phase 1: client-friendly status labels throughout — "Aguardando sua aprovação", "Em produção", "Implantado", etc. (no more raw technical strings like `waiting_approval`).
 - Client portal Phase 1: roadmap stages display human-readable labels ("A fazer", "Em andamento", "Concluído").

@@ -244,6 +244,7 @@ export default function Home() {
   const [selectedRunner, setSelectedRunner] = useState<AgentRunner>("codex");
   const [pendingDecision, setPendingDecision] = useState<"changes_requested" | "rejected" | null>(null);
   const [approvalComment, setApprovalComment] = useState("");
+  const [activeSection, setActiveSection] = useState("Projetos");
 
   useEffect(() => {
     setToken(localStorage.getItem(tokenKey) ?? "");
@@ -701,7 +702,12 @@ export default function Home() {
           {navItems.map(({ icon: Icon, label }) => (
             <button
               key={label}
-              className="flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-neutral-700 hover:bg-neutral-100"
+              className={`flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-sm font-medium transition-colors ${
+                activeSection === label
+                  ? "bg-neutral-950 text-white"
+                  : "text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900"
+              }`}
+              onClick={() => setActiveSection(label)}
               type="button"
             >
               <Icon className="h-4 w-4" />
@@ -764,7 +770,7 @@ export default function Home() {
             </form>
           ) : null}
 
-          {isTeam ? (
+          {isTeam && (activeSection === "Dashboard" || activeSection === "Agent Runs") ? (
             <section className="mb-5 space-y-5">
               <div className="grid gap-4 md:grid-cols-5">
                 {[
@@ -981,9 +987,67 @@ export default function Home() {
             </section>
           ) : null}
 
-          {activeOrg ? (
-            <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+          {activeOrg && !isTeam && activeSection === "Dashboard" ? (
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-3">
+                {[
+                  { label: "Projetos ativos", value: projects.filter(p => p.status === "active" || p.status === "exported").length, sub: "em andamento" },
+                  { label: "Aguardando ação", value: projects.filter(p => p.status === "waiting_approval").length, sub: "precisam de aprovação" },
+                  { label: "Implantados", value: projects.filter(p => p.status === "exported").length, sub: "disponíveis" },
+                ].map(card => (
+                  <div key={card.label} className="rounded-md border border-neutral-200 bg-white p-4">
+                    <p className="text-sm text-neutral-500">{card.label}</p>
+                    <strong className="mt-1 block text-3xl">{card.value}</strong>
+                    <p className="mt-1 text-xs text-neutral-400">{card.sub}</p>
+                  </div>
+                ))}
+              </div>
+              {projects.length === 0 ? (
+                <div className="rounded-md border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500">
+                  Nenhum projeto ainda. Vá em <button className="font-medium underline" onClick={() => setActiveSection("Projetos")} type="button">Projetos</button> para criar o primeiro.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {projects.map(project => {
+                    const deployment = allDeployments.find(d => d.project === project.id);
+                    const next = clientNextAction(project.status);
+                    return (
+                      <div key={project.id} className="rounded-md border border-neutral-200 bg-white p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{project.name}</p>
+                            <p className={`mt-1 text-sm ${next.urgent ? "font-medium text-amber-700" : "text-neutral-500"}`}>{next.text}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge tone={statusTone(project.status)}>{clientLabel(project.status)}</Badge>
+                            {deployment?.status === "ready" ? (
+                              <a href={deployment.url} target="_blank" rel="noreferrer"
+                                className="inline-flex h-8 items-center gap-1 rounded-md bg-teal-700 px-3 text-xs font-medium text-white hover:bg-teal-800">
+                                Acessar →
+                              </a>
+                            ) : null}
+                            <button
+                              className="text-xs text-neutral-500 underline"
+                              onClick={() => { setSelectedProjectId(project.id); setActiveSection("Projetos"); }}
+                              type="button"
+                            >
+                              Ver detalhes
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {activeOrg && !(activeSection === "Dashboard" && !isTeam) ? (
+            <div className={`grid gap-5 ${["Mensagens", "Tickets", "Exportacoes", "Agent Runs"].includes(activeSection) ? "" : "xl:grid-cols-[1.35fr_0.65fr]"}`}>
               <section className="space-y-5">
+                {/* Mini metrics — Dashboard e Projetos */}
+                {(activeSection === "Dashboard" || activeSection === "Projetos") ? (
                 <div className="grid gap-4 md:grid-cols-4">
                   {[
                     ["Projetos", String(projects.length), "privados"],
@@ -1000,7 +1064,10 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
+                ) : null}
 
+                {/* Workforce — Agent Runs e Dashboard admin */}
+                {(activeSection === "Agent Runs" || (isTeam && activeSection === "Dashboard")) ? (
                 <div className="rounded-md border border-neutral-200 bg-white p-4">
                   <div className="mb-4 flex items-center justify-between gap-3">
                     <div>
@@ -1035,7 +1102,10 @@ export default function Home() {
                     })}
                   </div>
                 </div>
+                ) : null}
 
+                {/* Create form + project list — Projetos e Dashboard */}
+                {(activeSection === "Projetos" || activeSection === "Dashboard") ? (
                 <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
                   <form
                     className="rounded-md border border-neutral-200 bg-white p-4"
@@ -1115,8 +1185,10 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+                ) : null}
 
-                {selectedProject ? (
+                {/* Project detail — Projetos e Dashboard */}
+                {selectedProject && (activeSection === "Projetos" || activeSection === "Dashboard") ? (
                   <>
                     {/* Next action banner */}
                     {(() => {
@@ -1334,6 +1406,11 @@ export default function Home() {
                       );
                     })()}
 
+                  </>
+                ) : null}
+
+                {/* Imports — Exportacoes section */}
+                {selectedProject && activeSection === "Exportacoes" ? (
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between">
                         <h2 className="font-semibold">Importacao segura</h2>
@@ -1360,6 +1437,10 @@ export default function Home() {
                       ) : null}
                     </div>
 
+                ) : null}
+
+                {/* Agent panel — Agent Runs section */}
+                {selectedProject && activeSection === "Agent Runs" ? (
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
@@ -1421,11 +1502,13 @@ export default function Home() {
                         </div>
                       </form>
                     </div>
-                  </>
                 ) : null}
               </section>
 
+              {/* Right column — only visible on relevant sections */}
+              {["Mensagens", "Tickets", "Projetos", "Dashboard"].includes(activeSection) ? (
               <section className="space-y-5">
+                {(activeSection === "Mensagens" || activeSection === "Projetos" || activeSection === "Dashboard") ? (
                 <div className="rounded-md border border-neutral-200 bg-white p-4">
                   <div className="mb-4">
                     <h2 className="font-semibold">Solicitar alteracoes</h2>
@@ -1507,7 +1590,10 @@ export default function Home() {
                     </Button>
                   </div>
                 </div>
+                ) : null}
 
+                {(activeSection === "Tickets" || activeSection === "Projetos" || activeSection === "Dashboard") ? (
+                <>
                 <div className="rounded-md border border-neutral-200 bg-white p-4">
                   <h2 className="mb-4 font-semibold">Tickets</h2>
                   <div className="space-y-3">
@@ -1588,7 +1674,10 @@ export default function Home() {
                     <p className="text-sm text-neutral-500">Nenhum assessment para este projeto.</p>
                   )}
                 </div>
+                </>
+                ) : null}
               </section>
+              ) : null}
             </div>
           ) : null}
         </div>
