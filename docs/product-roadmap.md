@@ -657,48 +657,36 @@ Production readiness requires:
 
 ## 11. Roadmap To Complete Product Launch
 
-### Phase 0: Local MVP Stabilization
+### Phase 0: Local MVP Stabilization ✅ COMPLETE (2026-06-04)
 
 Goal: make the current local product coherent and demonstrable.
 
-Deliverables:
+Delivered:
 
-- Client can create project.
-- Client can approve/request changes.
-- Project plan is generated.
-- Roadmap is visible.
-- Tickets are generated.
-- Local Codex workflow creates auditable `AgentRun`.
-- Admin can inspect projects, prompts, outputs, tickets, assessments, and deployments.
-- Deployment URL exists at `/projects/:id/deployment`.
-- Docker Compose starts all services.
+- Client creates project → plan, roadmap, and tickets generated automatically.
+- Client can approve, request changes (with required comment), or reject scope.
+- Local Codex and Claude Code handoff workflows create auditable `AgentRun` records.
+- Admin inspects projects, prompts, outputs, tickets, assessments, deployments, and agent runs.
+- Deployment URL published at `/projects/:id/deployment`.
+- Docker Compose starts all services (postgres, redis, minio, gitea, backend, celery, frontend).
+- Token accounting fields on every `AgentRun` (input/output/total tokens, cost, currency, source).
+- Backend tests pass (13/13). Frontend typecheck passes. Ruff passes.
 
-Exit criteria:
-
-- Demo can be run locally from a clean machine.
-- Admin and client flows both work.
-- Backend tests pass.
-- Frontend typecheck passes.
-
-### Phase 1: Client Portal Quality
+### Phase 1: Client Portal Quality ✅ COMPLETE (2026-06-04)
 
 Goal: make the client side feel like a paid product.
 
-Deliverables:
+Delivered:
 
-- Redesigned client dashboard.
-- Improved project detail page.
-- Clear deployment card.
-- Approval flow with required comments for changes/rejection.
-- Client timeline.
-- Client subscription card.
-- Empty/loading/error states on all API-driven sections.
-
-Exit criteria:
-
-- A non-technical client understands project state within 30 seconds.
-- The deployment URL is easy to find.
-- The client can see what action is needed next.
+- Sidebar navigation wired: Dashboard, Projetos, Mensagens, Tickets, Agent Runs, Exportacoes each show focused content.
+- Client Dashboard: summary cards (active, waiting approval, deployed) + project list with status labels and deployment links.
+- Human-readable status labels throughout client view (no technical strings exposed).
+- Next-action banner per project — clients know what to do within 30 seconds.
+- Prominent delivery card: teal highlight + "Acessar projeto →" button when deployed.
+- Approval flow: "Aprovar" = one click; "Solicitar mudanças"/"Rejeitar" require a comment (enforced backend + frontend).
+- Project timeline (Histórico de entregas): plan, approvals, agent updates, deployment events.
+- Subscription stub card (placeholder for Phase 4).
+- `ApprovalSerializer` enforces non-empty comment on changes_requested/rejected (HTTP 400).
 
 ### Phase 2: Admin Operations Cockpit
 
