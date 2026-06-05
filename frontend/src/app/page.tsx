@@ -37,6 +37,7 @@ import type {
   ProjectImport,
   ProjectMessage,
   ProjectPlan,
+  QAChecklist,
   Stage,
   Ticket,
   User,
@@ -342,6 +343,12 @@ export default function Home() {
     queryFn: () => apiRequest<Array<{id: number; project: number; decision: string; comment: string; created_at: string}>>("/approvals/", token),
     enabled: Boolean(token),
   });
+  const [qaDeploymentId, setQaDeploymentId] = useState<number | null>(null);
+  const qaChecklistQuery = useQuery({
+    queryKey: ["qa-checklist", qaDeploymentId, token],
+    queryFn: () => apiRequest<QAChecklist>(`/deployments/${qaDeploymentId}/qa-checklist/`, token),
+    enabled: Boolean(token) && qaDeploymentId !== null,
+  });
 
   const user = userQuery.data?.[0];
   const isTeam = user?.role === "admin" || user?.role === "staff";
@@ -399,6 +406,7 @@ export default function Home() {
       assessmentsQuery.error,
       deploymentsQuery.error,
       approvalsQuery.error,
+      qaChecklistQuery.error,
     ];
     if (errors.some((error) => String(error?.message ?? error).includes("API 401"))) {
       localStorage.removeItem(tokenKey);
@@ -411,6 +419,7 @@ export default function Home() {
     agentRunsQuery.error,
     agentRegistryQuery.error,
     approvalsQuery.error,
+    qaChecklistQuery.error,
     assessmentsQuery.error,
     deploymentsQuery.error,
     importsQuery.error,
@@ -602,6 +611,29 @@ export default function Home() {
       await invalidateWorkspace();
     },
     onError: () => setNotice("Não foi possível alterar o status."),
+  });
+
+  const patchQAChecklistMutation = useMutation({
+    mutationFn: (data: Partial<QAChecklist>) =>
+      apiRequest<QAChecklist>(`/deployments/${qaDeploymentId}/qa-checklist/`, token, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["qa-checklist", qaDeploymentId, token] });
+    },
+    onError: () => setNotice("Não foi possível atualizar o checklist."),
+  });
+
+  const toggleTicketVisibilityMutation = useMutation({
+    mutationFn: ({ id, client_visible }: { id: number; client_visible: boolean }) =>
+      apiRequest<Ticket>(`/tickets/${id}/`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ client_visible }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["tickets", token] });
+    },
   });
 
   const logout = () => {
@@ -1221,8 +1253,66 @@ export default function Home() {
                             Ativar
                           </Button>
                         )}
+                        <button
+                          className="text-xs font-medium text-neutral-500 underline"
+                          onClick={() => setQaDeploymentId(qaDeploymentId === d.id ? null : d.id)}
+                          type="button"
+                        >
+                          {qaDeploymentId === d.id ? "Fechar QA" : "Ver QA"}
+                        </button>
                         <a href={d.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-teal-700 hover:underline">abrir</a>
                       </div>
+
+                      {/* QA Checklist panel */}
+                      {qaDeploymentId === d.id ? (() => {
+                        const qa = qaChecklistQuery.data;
+                        if (!qa) return <div className="mt-3 text-xs text-neutral-400">Carregando checklist...</div>;
+                        const items: { key: keyof QAChecklist; label: string; auto: boolean }[] = [
+                          { key: "scope_approved", label: "Escopo aprovado pelo cliente", auto: true },
+                          { key: "roadmap_completed", label: "Todas as etapas do roadmap concluídas", auto: true },
+                          { key: "no_blocking_tickets", label: "Sem tickets críticos em aberto", auto: true },
+                          { key: "url_reachable", label: "URL da implantação acessível", auto: false },
+                          { key: "client_page_reviewed", label: "Página do cliente revisada", auto: false },
+                          { key: "notes_complete", label: "Notas internas documentadas", auto: false },
+                        ];
+                        return (
+                          <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                              <p className="text-xs font-semibold text-neutral-700">Checklist de QA</p>
+                              <Badge tone={qa.is_complete ? "green" : "amber"}>
+                                {qa.is_complete ? "Completo" : `${[qa.scope_approved, qa.roadmap_completed, qa.no_blocking_tickets, qa.url_reachable, qa.client_page_reviewed, qa.notes_complete].filter(Boolean).length}/6`}
+                              </Badge>
+                            </div>
+                            <div className="space-y-2">
+                              {items.map(item => {
+                                const checked = qa[item.key] as boolean;
+                                return (
+                                  <label key={item.key} className={`flex cursor-pointer items-center gap-2 text-xs ${item.auto ? "cursor-default" : ""}`}>
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      disabled={item.auto || patchQAChecklistMutation.isPending}
+                                      onChange={item.auto ? undefined : () =>
+                                        patchQAChecklistMutation.mutate({ [item.key]: !checked } as Partial<QAChecklist>)
+                                      }
+                                      className="h-3.5 w-3.5 rounded"
+                                    />
+                                    <span className={checked ? "text-neutral-800" : "text-neutral-500"}>
+                                      {item.label}
+                                      {item.auto && <span className="ml-1 text-neutral-400">(auto)</span>}
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                            {!qa.is_complete && (
+                              <p className="mt-2 text-xs text-amber-700">
+                                Complete todos os itens antes de ativar a implantação.
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })() : null}
                     </div>
                   ))}
                 </div>
@@ -1479,8 +1569,22 @@ export default function Home() {
 
                     <div className="rounded-md border border-neutral-200 bg-white p-4">
                       <div className="mb-4 flex items-center justify-between">
-                        <h2 className="font-semibold">Plano gerado</h2>
-                        {selectedPlan ? <Badge tone={statusTone(selectedPlan.status)}>{selectedPlan.status}</Badge> : null}
+                        <div>
+                          <h2 className="font-semibold">Plano gerado</h2>
+                          {selectedPlan?.version && selectedPlan.version > 1 ? (
+                            <p className="mt-0.5 text-xs text-neutral-400">versão {selectedPlan.version}</p>
+                          ) : null}
+                        </div>
+                        {selectedPlan ? (
+                          <div className="flex items-center gap-2">
+                            {selectedPlan.version > 1 && (
+                              <Badge tone="neutral">v{selectedPlan.version}</Badge>
+                            )}
+                            <Badge tone={statusTone(selectedPlan.status)}>
+                              {clientLabel(selectedPlan.status, CLIENT_PLAN_LABELS)}
+                            </Badge>
+                          </div>
+                        ) : null}
                       </div>
                       {selectedPlan ? (
                         <div className="space-y-4">
@@ -1847,7 +1951,20 @@ export default function Home() {
                       <div key={ticket.id} className="rounded-md border border-neutral-200 p-3">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-medium">{ticket.title}</p>
-                          <Badge tone={statusTone(ticket.priority)}>{ticket.priority}</Badge>
+                          <div className="flex items-center gap-2">
+                            {isTeam && (
+                              <button
+                                className={`rounded px-1.5 py-0.5 text-xs ${ticket.client_visible ? "bg-teal-50 text-teal-700" : "bg-neutral-100 text-neutral-500"}`}
+                                disabled={toggleTicketVisibilityMutation.isPending}
+                                onClick={() => toggleTicketVisibilityMutation.mutate({ id: ticket.id, client_visible: !ticket.client_visible })}
+                                title={ticket.client_visible ? "Visível ao cliente — clique para ocultar" : "Oculto do cliente — clique para mostrar"}
+                                type="button"
+                              >
+                                {ticket.client_visible ? "visível" : "oculto"}
+                              </button>
+                            )}
+                            <Badge tone={statusTone(ticket.priority)}>{ticket.priority}</Badge>
+                          </div>
                         </div>
                         <p className="mt-1 text-xs text-neutral-500">
                           {ticket.status} · {ticket.source}

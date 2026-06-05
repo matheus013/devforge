@@ -26,6 +26,7 @@ def record_approval(*, user, project, plan, decision: str, comment: str = "") ->
     else:
         project.status = Project.Status.PLANNING
         plan.status = "changes_requested"
+        plan.version = plan.version + 1
     project.save(update_fields=["status", "updated_at"])
-    plan.save(update_fields=["status", "updated_at"])
+    plan.save(update_fields=["status", "version", "updated_at"])
     return approval

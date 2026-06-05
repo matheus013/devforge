@@ -65,11 +65,12 @@ class ProjectPlan(models.Model):
     estimate = models.JSONField(default=dict)
     acceptance_criteria = models.JSONField(default=list)
     status = models.CharField(max_length=30, default="waiting_approval")
+    version = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return f"Plan for {self.project_id}: {self.status}"
+        return f"Plan for {self.project_id} v{self.version}: {self.status}"
 
 
 class ProjectStage(models.Model):

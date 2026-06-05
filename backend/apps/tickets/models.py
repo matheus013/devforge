@@ -18,6 +18,7 @@ class Ticket(models.Model):
     priority = models.CharField(max_length=20, default="normal")
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.OPEN)
     source = models.CharField(max_length=40, default="manual")
+    client_visible = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

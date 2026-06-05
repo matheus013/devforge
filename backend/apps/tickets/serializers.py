@@ -17,6 +17,7 @@ class TicketSerializer(serializers.ModelSerializer):
             "priority",
             "status",
             "source",
+            "client_visible",
             "created_at",
             "updated_at",
         ]

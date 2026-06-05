@@ -45,6 +45,7 @@ export type ProjectPlan = {
   estimate: { weeks?: number; confidence?: string; team?: string };
   acceptance_criteria: string[];
   status: string;
+  version: number;
   created_at: string;
   updated_at: string;
 };
@@ -57,6 +58,21 @@ export type Ticket = {
   priority: string;
   status: string;
   source: string;
+  client_visible: boolean;
+};
+
+export type QAChecklist = {
+  id: number;
+  deployment: number;
+  scope_approved: boolean;
+  roadmap_completed: boolean;
+  no_blocking_tickets: boolean;
+  url_reachable: boolean;
+  client_page_reviewed: boolean;
+  notes_complete: boolean;
+  is_complete: boolean;
+  updated_by: number | null;
+  updated_at: string;
 };
 
 export type ProjectMessage = {

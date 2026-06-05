@@ -72,10 +72,11 @@ class ProjectPlanSerializer(serializers.ModelSerializer):
             "estimate",
             "acceptance_criteria",
             "status",
+            "version",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "organization", "created_at", "updated_at"]
+        read_only_fields = ["id", "organization", "version", "created_at", "updated_at"]
 
     def validate_project(self, project):
         if not (

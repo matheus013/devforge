@@ -4,6 +4,13 @@
 
 ### Added
 
+- Phase 3 QA gates — `QAChecklist` model linked to each deployment with 3 auto-computed items (scope approved, roadmap complete, no blocking tickets) and 3 manual admin checks (URL reachable, client page reviewed, notes complete). `set_status` now blocks activation if the checklist is incomplete (HTTP 400 with checklist state).
+- Phase 3 QA gates — `PATCH /api/deployments/{id}/qa-checklist/` lets admins toggle manual checklist items; `GET` returns auto-refreshed state.
+- Phase 3 — `Ticket.client_visible` field (default `True`) with admin toggle in the Tickets section; marks which tickets are visible to the client.
+- Phase 3 — `ProjectPlan.version` field (incremented on each `changes_requested` approval); plan version badge shown in the approval UI.
+- Phase 3 — `POST /api/qa-checklists/` read endpoint registered for future bulk monitoring.
+- 3 new database migrations: `projects/0002`, `tickets/0002`, `deployments/0003`.
+
 - Phase 2 admin cockpit — team queue on Dashboard: shows projects waiting approval, pending agent runs, failed deployments, and high-priority tickets; each item links to the relevant project.
 - Phase 2 admin cockpit — agent run monitor on "Agent Runs": filter by skill and status; expandable rows show full input/output JSON, logs, and token breakdown (in/out/total, source, cost); token ledger table shows cost and tokens per project.
 - Phase 2 admin cockpit — deployment management on "Exportacoes": admin can activate or disable each deployment with a button (calls new `POST /api/deployments/{id}/set-status/` endpoint).
