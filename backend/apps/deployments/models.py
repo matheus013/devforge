@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.db import models
 
 
@@ -25,3 +26,42 @@ class Deployment(models.Model):
 
     def __str__(self) -> str:
         return f"{self.project_id} {self.environment}: {self.status}"
+
+
+class QAChecklist(models.Model):
+    deployment = models.OneToOneField(
+        Deployment, on_delete=models.CASCADE, related_name="qa_checklist"
+    )
+    organization = models.ForeignKey("organizations.Organization", on_delete=models.CASCADE)
+    # Auto-computed from project state (refreshed by the API)
+    scope_approved = models.BooleanField(default=False)
+    roadmap_completed = models.BooleanField(default=False)
+    no_blocking_tickets = models.BooleanField(default=False)
+    # Manual checks — admin must verify
+    url_reachable = models.BooleanField(default=False)
+    client_page_reviewed = models.BooleanField(default=False)
+    notes_complete = models.BooleanField(default=False)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="qa_checklists_updated",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        state = "done" if self.is_complete else "pending"
+        return f"QA for deployment {self.deployment_id}: {state}"
+
+    @property
+    def is_complete(self) -> bool:
+        return all([
+            self.scope_approved,
+            self.roadmap_completed,
+            self.no_blocking_tickets,
+            self.url_reachable,
+            self.client_page_reviewed,
+            self.notes_complete,
+        ])

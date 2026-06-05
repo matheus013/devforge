@@ -4,8 +4,9 @@ from rest_framework.response import Response
 
 from apps.organizations.selectors import organizations_for_user
 
-from .models import Deployment
-from .serializers import DeploymentSerializer
+from .models import Deployment, QAChecklist
+from .serializers import DeploymentSerializer, QAChecklistSerializer
+from .services import refresh_qa_checklist
 
 
 class _SetStatusSerializer(serializers.Serializer):
@@ -33,8 +34,54 @@ class DeploymentViewSet(viewsets.ReadOnlyModelViewSet):
         deployment = self.get_object()
         serializer = _SetStatusSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        deployment.status = serializer.validated_data["status"]
+        new_status = serializer.validated_data["status"]
+
+        if new_status == Deployment.Status.READY:
+            checklist = refresh_qa_checklist(deployment)
+            if not checklist.is_complete:
+                return Response(
+                    {
+                        "detail": (
+                        "O checklist de QA deve estar completo antes de ativar a implantacao."
+                    ),
+                        "qa_checklist": QAChecklistSerializer(checklist).data,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        deployment.status = new_status
         if "notes" in serializer.validated_data:
             deployment.notes = serializer.validated_data["notes"]
         deployment.save(update_fields=["status", "notes", "updated_at"])
         return Response(DeploymentSerializer(deployment).data)
+
+    @action(detail=True, methods=["get", "patch"], url_path="qa-checklist")
+    def qa_checklist(self, request, pk=None):
+        if request.user.role not in ("admin", "staff"):
+            return Response(
+                {"detail": "Apenas administradores podem acessar o checklist de QA."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        deployment = self.get_object()
+        checklist = refresh_qa_checklist(deployment)
+
+        if request.method == "PATCH":
+            manual_fields = ["url_reachable", "client_page_reviewed", "notes_complete"]
+            for field in manual_fields:
+                if field in request.data:
+                    setattr(checklist, field, bool(request.data[field]))
+            checklist.updated_by = request.user
+            checklist.save(
+                update_fields=manual_fields + ["updated_by", "updated_at"]
+            )
+
+        return Response(QAChecklistSerializer(checklist).data)
+
+
+class QAChecklistViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = QAChecklistSerializer
+
+    def get_queryset(self):
+        return QAChecklist.objects.filter(
+            organization__in=organizations_for_user(self.request.user)
+        ).select_related("deployment", "updated_by")

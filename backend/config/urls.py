@@ -6,7 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from apps.accounts.views import RegisterView, UserViewSet
 from apps.agents.views import AgentRunViewSet
 from apps.approvals.views import ApprovalViewSet
-from apps.deployments.views import DeploymentViewSet
+from apps.deployments.views import DeploymentViewSet, QAChecklistViewSet
 from apps.exports.views import CodeExportRequestViewSet
 from apps.imports.views import ProjectAssessmentViewSet, ProjectImportViewSet
 from apps.organizations.views import OrganizationMemberViewSet, OrganizationViewSet
@@ -33,6 +33,7 @@ router.register("assessments", ProjectAssessmentViewSet, basename="assessments")
 router.register("exports", CodeExportRequestViewSet, basename="exports")
 router.register("agent-runs", AgentRunViewSet, basename="agent-runs")
 router.register("deployments", DeploymentViewSet, basename="deployments")
+router.register("qa-checklists", QAChecklistViewSet, basename="qa-checklists")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
