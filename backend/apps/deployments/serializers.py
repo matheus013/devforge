@@ -13,6 +13,7 @@ class DeploymentSerializer(serializers.ModelSerializer):
             "environment",
             "status",
             "url",
+            "admin_url",
             "notes",
             "created_at",
             "updated_at",

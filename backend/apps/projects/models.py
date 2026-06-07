@@ -27,6 +27,7 @@ class Project(models.Model):
     type = models.CharField(max_length=40, choices=Type.choices, default=Type.NEW_BUILD)
     status = models.CharField(max_length=40, choices=Status.choices, default=Status.DRAFT)
     stack = models.JSONField(default=dict, blank=True)
+    has_database = models.BooleanField(default=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="projects"
     )

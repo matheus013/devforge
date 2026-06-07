@@ -14,6 +14,7 @@ class _SetStatusSerializer(serializers.Serializer):
         choices=[Deployment.Status.READY, Deployment.Status.DISABLED, Deployment.Status.FAILED]
     )
     notes = serializers.CharField(required=False, allow_blank=True, max_length=500)
+    admin_url = serializers.URLField(required=False, allow_blank=True, max_length=500)
 
 
 class DeploymentViewSet(viewsets.ReadOnlyModelViewSet):
@@ -52,7 +53,9 @@ class DeploymentViewSet(viewsets.ReadOnlyModelViewSet):
         deployment.status = new_status
         if "notes" in serializer.validated_data:
             deployment.notes = serializer.validated_data["notes"]
-        deployment.save(update_fields=["status", "notes", "updated_at"])
+        if "admin_url" in serializer.validated_data:
+            deployment.admin_url = serializer.validated_data["admin_url"]
+        deployment.save(update_fields=["status", "notes", "admin_url", "updated_at"])
         return Response(DeploymentSerializer(deployment).data)
 
     @action(detail=True, methods=["get", "patch"], url_path="qa-checklist")
