@@ -17,6 +17,7 @@ class Deployment(models.Model):
     environment = models.CharField(max_length=40, default="subscription-deployment")
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.READY)
     url = models.URLField(max_length=500)
+    admin_url = models.URLField(max_length=500, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -19,6 +19,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "type",
             "status",
             "stack",
+            "has_database",
             "created_by",
             "created_at",
             "updated_at",

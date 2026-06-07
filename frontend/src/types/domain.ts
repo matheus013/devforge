@@ -22,6 +22,7 @@ export type Project = {
   type: string;
   status: ProjectStatus;
   stack: Record<string, string>;
+  has_database: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -150,6 +151,7 @@ export type Deployment = {
   environment: string;
   status: "ready" | "failed" | "disabled";
   url: string;
+  admin_url: string;
   notes: string;
   created_at: string;
   updated_at: string;

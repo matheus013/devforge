@@ -10,7 +10,9 @@ def deployment_url_for_project(project) -> str:
     return f"{frontend_url}/projects/{project.id}/deployment"
 
 
-def publish_subscription_deployment(*, project, notes: str = "") -> Deployment:
+def publish_subscription_deployment(
+    *, project, notes: str = "", admin_url: str = ""
+) -> Deployment:
     deployment, _ = Deployment.objects.update_or_create(
         project=project,
         defaults={
@@ -18,6 +20,7 @@ def publish_subscription_deployment(*, project, notes: str = "") -> Deployment:
             "environment": "subscription-deployment",
             "status": Deployment.Status.READY,
             "url": deployment_url_for_project(project),
+            "admin_url": admin_url,
             "notes": notes,
         },
     )

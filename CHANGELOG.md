@@ -4,6 +4,11 @@
 
 ### Added
 
+- `Project.has_database` boolean field (default `False`) — marks at design time whether the project requires a database. Shown as badge "DB" in the client project list, dashboard summary, and admin project monitor.
+- `Deployment.admin_url` optional URL field — stores the admin panel URL of the client's deployed app (separate from the public web interface URL `url`). Shown as a "Painel admin →" link in the client delivery card when set. Admin sets it in the activation form.
+- Admin deployment management: input field for `admin_url` when activating a deployment; admin_url and DB badge visible per deployment.
+- 2 new migrations: `projects/0003`, `deployments/0004`.
+
 - Phase 3 QA gates — `QAChecklist` model linked to each deployment with 3 auto-computed items (scope approved, roadmap complete, no blocking tickets) and 3 manual admin checks (URL reachable, client page reviewed, notes complete). `set_status` now blocks activation if the checklist is incomplete (HTTP 400 with checklist state).
 - Phase 3 QA gates — `PATCH /api/deployments/{id}/qa-checklist/` lets admins toggle manual checklist items; `GET` returns auto-refreshed state.
 - Phase 3 — `Ticket.client_visible` field (default `True`) with admin toggle in the Tickets section; marks which tickets are visible to the client.

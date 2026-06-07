@@ -59,6 +59,7 @@ const projectSchema = z.object({
   name: z.string().min(3),
   description: z.string().min(10),
   type: z.enum(["new_build", "imported_project", "maintenance", "audit_only"]),
+  has_database: z.boolean().default(false),
 });
 
 const importSchema = z.object({
@@ -248,6 +249,7 @@ export default function Home() {
   const [activeSection, setActiveSection] = useState("Projetos");
   const [runFilter, setRunFilter] = useState({ skill: "", status: "" });
   const [expandedRunId, setExpandedRunId] = useState<number | null>(null);
+  const [adminUrlInputs, setAdminUrlInputs] = useState<Record<number, string>>({});
 
   useEffect(() => {
     setToken(localStorage.getItem(tokenKey) ?? "");
@@ -267,6 +269,7 @@ export default function Home() {
       name: "",
       description: "",
       type: "new_build",
+      has_database: false,
     },
   });
   const importForm = useForm<z.infer<typeof importSchema>>({
@@ -601,10 +604,10 @@ export default function Home() {
   });
 
   const setDeploymentStatusMutation = useMutation({
-    mutationFn: ({ id, status: newStatus }: { id: number; status: string }) =>
+    mutationFn: ({ id, status: newStatus, admin_url }: { id: number; status: string; admin_url?: string }) =>
       apiRequest<Deployment>(`/deployments/${id}/set-status/`, token, {
         method: "POST",
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ status: newStatus, ...(admin_url ? { admin_url } : {}) }),
       }),
     onSuccess: async () => {
       setNotice("Status da implantação atualizado.");
@@ -883,7 +886,10 @@ export default function Home() {
                                 {orgNameById.get(project.organization) ?? project.organization}
                               </td>
                               <td className="border-b border-neutral-100 py-3 pr-3">
-                                <Badge tone={statusTone(project.status)}>{project.status}</Badge>
+                                <div className="flex items-center gap-1">
+                                  <Badge tone={statusTone(project.status)}>{project.status}</Badge>
+                                  {project.has_database && <Badge tone="neutral">DB</Badge>}
+                                </div>
                               </td>
                               <td className="border-b border-neutral-100 py-3 pr-3">{ticketCount}</td>
                               <td className="border-b border-neutral-100 py-3">{runCount}</td>
@@ -1228,8 +1234,16 @@ export default function Home() {
                   {allDeployments.map(d => (
                     <div key={d.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-200 p-3">
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-sm">{projectNameById.get(d.project) ?? d.project}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="truncate font-medium text-sm">{projectNameById.get(d.project) ?? d.project}</p>
+                          {projectById.get(d.project)?.has_database && (
+                            <Badge tone="neutral">DB</Badge>
+                          )}
+                        </div>
                         <p className="truncate text-xs text-neutral-500">{d.url}</p>
+                        {d.admin_url ? (
+                          <p className="truncate text-xs text-neutral-400">Admin: {d.admin_url}</p>
+                        ) : null}
                         {d.notes ? <p className="mt-1 text-xs text-neutral-400">{d.notes}</p> : null}
                       </div>
                       <div className="flex items-center gap-2">
@@ -1244,14 +1258,23 @@ export default function Home() {
                             Desativar
                           </Button>
                         ) : (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="url"
+                              className="h-7 w-48 rounded border border-neutral-300 px-2 text-xs"
+                              placeholder="URL admin (opcional)"
+                              value={adminUrlInputs[d.id] ?? ""}
+                              onChange={e => setAdminUrlInputs(v => ({ ...v, [d.id]: e.target.value }))}
+                            />
                           <Button
                             className="h-7 px-2 text-xs"
                             disabled={setDeploymentStatusMutation.isPending}
-                            onClick={() => setDeploymentStatusMutation.mutate({ id: d.id, status: "ready" })}
+                            onClick={() => setDeploymentStatusMutation.mutate({ id: d.id, status: "ready", admin_url: adminUrlInputs[d.id] ?? "" })}
                             type="button"
                           >
                             Ativar
                           </Button>
+                          </div>
                         )}
                         <button
                           className="text-xs font-medium text-neutral-500 underline"
@@ -1352,6 +1375,9 @@ export default function Home() {
                             <p className={`mt-1 text-sm ${next.urgent ? "font-medium text-amber-700" : "text-neutral-500"}`}>{next.text}</p>
                           </div>
                           <div className="flex items-center gap-2">
+                            {project.has_database && (
+                              <Badge tone="neutral">DB</Badge>
+                            )}
                             <Badge tone={statusTone(project.status)}>{clientLabel(project.status)}</Badge>
                             {deployment?.status === "ready" ? (
                               <a href={deployment.url} target="_blank" rel="noreferrer"
@@ -1464,6 +1490,14 @@ export default function Home() {
                         <option value="maintenance">Manutencao</option>
                         <option value="audit_only">Apenas auditoria</option>
                       </select>
+                      <label className="flex cursor-pointer items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded"
+                          {...projectForm.register("has_database")}
+                        />
+                        <span>O projeto usa banco de dados</span>
+                      </label>
                       {createProjectMutation.error ? (
                         <p className="text-sm text-rose-700">Nao foi possivel criar o projeto.</p>
                       ) : null}
@@ -1689,18 +1723,35 @@ export default function Home() {
                         </Badge>
                       </div>
                       {selectedDeployment?.status === "ready" ? (
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="flex-1 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-mono text-teal-800 truncate">
-                            {selectedDeployment.url}
-                          </span>
-                          <a
-                            className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-medium text-white transition hover:bg-teal-800"
-                            href={selectedDeployment.url}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            Acessar projeto →
-                          </a>
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-3">
+                            <span className="flex-1 rounded-md border border-teal-200 bg-white px-3 py-2 text-sm font-mono text-teal-800 truncate">
+                              {selectedDeployment.url}
+                            </span>
+                            <a
+                              className="inline-flex h-9 items-center justify-center rounded-md bg-teal-700 px-4 text-sm font-medium text-white transition hover:bg-teal-800"
+                              href={selectedDeployment.url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Acessar projeto →
+                            </a>
+                          </div>
+                          {selectedDeployment.admin_url ? (
+                            <div className="flex flex-wrap items-center gap-3">
+                              <span className="flex-1 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm font-mono text-neutral-600 truncate">
+                                {selectedDeployment.admin_url}
+                              </span>
+                              <a
+                                className="inline-flex h-9 items-center justify-center rounded-md border border-neutral-300 bg-white px-4 text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
+                                href={selectedDeployment.admin_url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Painel admin →
+                              </a>
+                            </div>
+                          ) : null}
                         </div>
                       ) : (
                         <p className="text-sm text-neutral-500">
