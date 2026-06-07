@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Documentation
+
+- Updated `docs/product-roadmap.md` with all new features and backlog: Phase 2 and 3 marked ✅ COMPLETE; Phase 4 (Subscriptions) expanded with change request limits, client finance portal, digital contracts, and Stripe; Phase 5 (Real Agents) expanded with health score and estimate-vs-reality; new Phase 5.5 (Notifications and Integrations) covering email, WhatsApp, webhooks, GitHub/GitLab, Slack, CLI, and API keys; new Phase 6.5 (Product Differentiation) covering project templates, white-label, public status page, mobile view, file attachments, weekly digest, and compliance audit reports; new Section 15 (Feature Backlog Summary) table with status and phase for every feature; updated Section 13 (Recommended Next Implementation Order) and Section 14 (Definition of Complete Product).
+
 ### Added
 
 - `Project.has_database` boolean field (default `False`) — marks at design time whether the project requires a database. Shown as badge "DB" in the client project list, dashboard summary, and admin project monitor.

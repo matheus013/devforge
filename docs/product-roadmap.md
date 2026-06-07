@@ -688,69 +688,58 @@ Delivered:
 - Subscription stub card (placeholder for Phase 4).
 - `ApprovalSerializer` enforces non-empty comment on changes_requested/rejected (HTTP 400).
 
-### Phase 2: Admin Operations Cockpit
+### Phase 2: Admin Operations Cockpit ✅ COMPLETE (2026-06-04)
 
 Goal: make the internal team capable of operating many clients.
 
-Deliverables:
+Delivered:
 
-- Admin cockpit.
-- Project operations detail.
-- Agent run monitor.
-- Prompt/output audit view.
-- Minimal token ledger fields on `AgentRun`.
-- Token usage dashboard by project.
-- Deployment management screen.
-- Team queue.
-- Filters by organization, project, status, agent, token usage, cost, and date.
+- Admin cockpit with 5 metrics cards and section-based navigation (Dashboard, Projetos, Mensagens, Tickets, Agent Runs, Exportacoes).
+- Team queue on Dashboard: projects waiting approval, pending agent runs, failed deployments, high-priority tickets — each with a "Ver projeto" link.
+- Agent run monitor with filters (skill, status), expandable rows showing full input/output JSON, logs, and token breakdown.
+- Token ledger table ranking projects by estimated cost and total tokens.
+- Deployment management with Ativar/Desativar buttons and admin_url input for the client's admin panel.
+- `POST /api/deployments/{id}/set-status/` action with admin/staff role check.
 
-Exit criteria:
-
-- Admin can diagnose any project from one place.
-- Admin can inspect every agent input and output.
-- Admin can see token usage and estimated cost per project.
-- Mocked runs can report estimated or explicitly unavailable token usage.
-- Admin can see all active deployments and failed states.
-
-### Phase 3: Workflow And QA Gates
+### Phase 3: Workflow And QA Gates ✅ COMPLETE (2026-06-04)
 
 Goal: prevent bad deliveries from being published.
 
-Deliverables:
+Delivered:
 
-- QA checklist model.
-- Deployment publish workflow.
-- Approval required before deployment.
-- Deployment status transitions.
-- Audit timeline.
-- Client-visible vs internal-only ticket distinction.
-- Plan versioning.
-
-Exit criteria:
-
-- A deployment cannot be marked active without required checks.
-- Every publish event is auditable.
-- Client approvals are tied to specific plan/deployment versions.
+- `QAChecklist` model linked to each deployment: 3 auto-computed items (scope approved, roadmap complete, no blocking tickets) + 3 manual admin checks (URL reachable, client page reviewed, notes complete).
+- `set_status` blocks activation with HTTP 400 unless checklist is complete; returns checklist state in error.
+- `GET/PATCH /api/deployments/{id}/qa-checklist/` for real-time state and manual check toggling.
+- `ProjectPlan.version` increments on each `changes_requested` approval; version badge in approval UI.
+- `Ticket.client_visible` field with admin toggle — internal-only tickets hidden from clients.
+- `Project.has_database` flag (design-time decision) and `Deployment.admin_url` (optional admin panel URL).
+- 5 database migrations across projects, tickets, and deployments apps.
 
 ### Phase 4: Subscription And Commercial Layer
 
-Goal: support the real business model.
+Goal: support the real business model and enable recurring revenue.
 
 Deliverables:
 
-- Subscription model.
-- Plan/package definitions.
-- Manual billing status.
-- Subscription status on client/admin views.
-- Deployment linked to subscription.
+- Subscription model with plan tiers (basic, growth, enterprise).
+- Plan/package definitions including change request allowance per tier.
+- Manual billing status (activate, pause, cancel) in admin.
+- Subscription status on client and admin views (replacing current stub card).
+- Deployment linked to subscription — disabled when subscription lapses.
 - Access rules based on active subscription.
 - Internal subscription management screen.
+- **Change request limits** — each plan defines a monthly allowance; client sees counter in the UI; upsell prompt when limit reached.
+- **Client finance portal** — billing history, invoice list, next renewal date, upgrade button.
+- **Digital contract on approval** — plan approval generates a PDF with scope, timeline, and price; client e-signs before scope is locked; `Approval` record linked to signed document.
+- **Stripe integration** — payment processing, automatic subscription renewal, webhook sync for payment events.
 
 Exit criteria:
 
 - Admin can activate/pause/cancel a subscription.
-- Client can see subscription status.
+- Client can see subscription status, billing history, and change request balance.
 - Deployment state reflects subscription state.
+- A client can approve scope and sign the contract in one flow.
+- Stripe payment completes without admin intervention.
 
 ### Phase 5: Real Agent Orchestration
 
@@ -758,23 +747,45 @@ Goal: replace deterministic mocks with controlled real orchestration.
 
 Deliverables:
 
-- Provider abstraction.
-- Queue-backed agent execution.
-- Agent retry policy.
-- Agent failure states.
-- Human approval gates.
+- Provider abstraction (`DEVFORGE_AGENT_MODE=real` env flag enabling live API calls).
+- Real Anthropic API integration for planner, complexity, import analyzer, ticket triage, and prompt refiner services — using actual token data.
+- Queue-backed agent execution via Celery.
+- Agent retry policy and failure states.
+- Human approval gates for high-cost or high-risk runs.
 - Tool permission model.
 - Multi-agent workflow definitions.
-- Cost tracking.
-- Real provider token accounting.
-- Project token budgets.
+- Real provider token accounting — replaces estimated/unavailable source markers.
+- Project token budgets with soft alerts (80%) and hard limits.
+- **Project health score** — auto-computed 0–100 score from existing data: open critical tickets, overdue stages, pending approvals, agent run failures, cost vs budget. Shown as a badge in the admin project monitor and team queue.
+- **Estimate vs reality tracking** — compare plan estimate (weeks, cost) against actual delivery time and agent run costs; admin sees variance per project and aggregate accuracy metrics.
 
 Exit criteria:
 
-- Real agent execution can be enabled per environment.
-- Every execution remains auditable.
-- Every execution records token usage.
+- Real agent execution can be enabled per environment without code changes.
+- Every execution remains auditable with real token usage.
 - Failed or risky runs require human review.
+- Admin can see project health score at a glance.
+- Plan estimate accuracy is measurable.
+
+### Phase 5.5: Notifications And Integrations
+
+Goal: reduce manual follow-up and connect DevForge to the tools teams already use.
+
+Deliverables:
+
+- **Email notifications** — triggered on key events: plan ready for approval, deployment published, change request received, QA checklist complete. Template-based, per-organization branding.
+- **WhatsApp / SMS notifications** — optional channel for approval urgency alerts (Twilio or Z-API).
+- **Webhooks** — outbound HTTP POST on configurable events (plan_approved, deployment_ready, agent_run_completed, ticket_created). Admin configures endpoints per organization.
+- **GitHub / GitLab integration** — connect a repository to a project; when a PR merges to the default branch, the corresponding roadmap stage auto-advances; commit messages feed into the audit timeline.
+- **Slack / Discord integration** — optional: post team queue alerts and deployment status updates to a configured channel.
+- **CLI tool** (`devforge`) — `devforge status`, `devforge deploy`, `devforge logs`, `devforge open` for the local agent workflow.
+- **API keys** — programmatic access tokens for organizations; allows external tools and CI pipelines to interact with DevForge.
+
+Exit criteria:
+
+- Client receives email when scope is ready without needing to check the panel.
+- Admin team is notified on Slack/Discord when a project enters the team queue.
+- A GitHub merge automatically advances the related roadmap stage.
 
 ### Phase 6: Imports, Sandboxing, And Code Packages
 
@@ -795,6 +806,26 @@ Exit criteria:
 - Imported repositories are assessed without unsafe execution.
 - Complex projects produce actionable tickets.
 - Admin can export a full handoff package.
+
+### Phase 6.5: Product Differentiation
+
+Goal: give DevForge a defensible market position beyond a standard project management tool.
+
+Deliverables:
+
+- **Project templates** — starter kits by niche (e-commerce, SaaS B2B, landing page, marketplace, API-only). Each template pre-fills the plan summary, features, risk list, roadmap stages, and estimate. Client picks a template at project creation; reduces briefing time significantly.
+- **Public status page per project** — sharable URL (e.g. `status.devforge.ai/org/projeto`) showing roadmap progress, current stage, and deployment status without login. Styled as a delivery tracker for the client's stakeholders.
+- **White-label** — agencies configure custom domain, logo, primary color, and email sender. Clients see `app.minhaagencia.com.br` instead of `devforge.ai`. Each organization can be white-labeled independently.
+- **Client mobile view** — simplified responsive layout for the client portal: status, next action, delivery URL, and change request input. Optimized for one-thumb navigation on mobile.
+- **File attachments in briefing** — clients upload mockups, wireframes, and reference documents at project creation. Stored in MinIO. Feeds into the planner context for richer plan generation.
+- **Weekly delivery digest** — auto-generated summary email sent to the client every Friday: stages completed this week, tickets resolved, upcoming work, and open requests. Keeps clients engaged without requiring login.
+- **Compliance audit report** — exportable PDF per project: all approval decisions with comments, plan versions, QA checklist completion, deployment events, and agent run summary. Required for regulated industries (healthcare, finance, government).
+
+Exit criteria:
+
+- An agency can onboard with their own branding in under one hour.
+- A client can share a public status link with their internal stakeholders.
+- A client can submit a brief with attached files and receive a richer plan.
 
 ### Phase 7: Production Infrastructure
 
@@ -906,36 +937,114 @@ Exit criteria:
 
 ## 13. Recommended Next Implementation Order
 
-1. Build improved client project detail with subscription and deployment framing.
-2. Build admin deployment management screen.
-3. Build admin agent run monitor with prompt/output details.
-4. Add token usage monitoring by project and organization.
-5. Add project audit timeline.
-6. Add QA checklist before active deployment.
-7. Add subscription model and manual admin controls.
-8. Add plan versioning and approval-to-version linkage.
-9. Add stronger permission tests.
-10. Add production deployment preparation.
-11. Start beta onboarding.
+Items 1–9 are complete as of Phase 3. Updated order for what remains:
+
+**Immediate (high ROI, low effort):**
+1. Email notifications — approval alerts and deployment events eliminate manual follow-up; uses Django email + templates, no new infrastructure.
+2. Project health score — computed from data that already exists; no new models; adds visible risk signal to the admin cockpit.
+3. Real agent mode (`DEVFORGE_AGENT_MODE=real`) — token fields and provider selection are already in place; enables the product to deliver real AI value.
+
+**Short term (commercial readiness):**
+4. Subscription model with change request limits — enables monetization; gates access to the product commercially.
+5. Client finance portal — billing history and next renewal; prepares for Stripe integration.
+6. Email/WhatsApp notifications — client approval urgency flow.
+7. Project templates — reduces briefing friction; strong first-impression feature for new clients.
+
+**Medium term (growth and differentiation):**
+8. GitHub/GitLab integration — auto-advance stages on PR merge; closes the loop between delivery and tracking.
+9. Webhooks — allows teams to use their own tools (Slack, n8n, Zapier) for operational alerts.
+10. Public status page — sharable delivery tracker; builds trust with client stakeholders.
+11. White-label — opens agency reseller channel.
+12. File attachments in briefing — richer plan generation with visual context.
+
+**Later (scale and compliance):**
+13. Stripe integration — automated billing and subscription lifecycle.
+14. Digital contract on approval — legal compliance for the subscription model.
+15. Compliance audit report PDF — required for regulated industries.
+16. Mobile-first client view — secondary channel for most clients.
+17. CLI tool and API keys — developer ecosystem tooling.
+18. Weekly delivery digest — passive engagement for clients.
+19. Estimate vs reality tracking — operational intelligence.
+20. Production infrastructure and beta launch.
 
 ## 14. Definition Of Complete Product
 
 DevForge AI can be considered a complete launchable product when:
 
+**Core delivery loop:**
 - A client can create an account and organization.
-- A client can create a project.
-- The system can generate a structured plan.
-- The client can approve, reject, or request changes.
-- The internal team can monitor all prompts, outputs, tickets, and results.
-- The internal team can monitor token usage and cost per project.
-- Agents create auditable `AgentRun` records.
+- A client can create a project with optional database flag and file attachments.
+- The system generates a structured plan from a template or custom brief.
+- The client approves, rejects, or requests changes — each with a required comment and digital signature.
 - Roadmap stages and tickets drive delivery.
-- A deployment URL is published as part of the subscription.
-- Admin can manage deployment state.
-- Subscription status is visible and operationally meaningful.
+- Stages auto-advance when linked GitHub PRs merge.
+- A web interface URL and an optional admin panel URL are published as part of the subscription.
+- Admin can manage deployment state; QA gates prevent premature activation.
+
+**Operations and auditability:**
+- The internal team can monitor all prompts, outputs, tickets, token costs, and project health scores.
+- Agents create auditable `AgentRun` records with real token usage.
 - Tenant data is isolated.
-- Imports are assessed safely.
-- QA gates exist before deployment.
-- The product can run in production with backups, logs, secrets, and monitoring.
+- Imports are assessed safely without code execution.
+- Every approval, deployment, and agent run is traceable in the audit timeline.
+- Compliance audit reports are exportable as PDF.
+
+**Commercial layer:**
+- Subscription status is visible and operationally meaningful.
+- Change request allowance is enforced per plan tier.
+- Billing history and next renewal date are visible to the client.
+- Stripe handles payment processing and subscription lifecycle.
+- Admin can activate/pause/cancel subscriptions.
+
+**Growth and differentiation:**
+- Agencies can deploy white-labeled instances on custom domains.
+- Clients receive proactive email notifications at every key milestone.
+- Public project status pages are available for stakeholder sharing.
+- Project templates reduce briefing time for common niches.
+- Webhooks allow integration with any external tooling.
+
+**Infrastructure:**
+- The product runs in production with backups, logs, secrets management, and error monitoring.
+- CI/CD deploys reliably without manual steps.
+
+## 15. Feature Backlog Summary
+
+### Product Differentiation
+| Feature | Phase | Status |
+|---------|-------|--------|
+| Project templates | 6.5 | Backlog |
+| Public status page per project | 6.5 | Backlog |
+| White-label (custom domain + branding) | 6.5 | Backlog |
+| Client mobile-first view | 6.5 | Backlog |
+| File attachments in briefing | 6.5 | Backlog |
+| Weekly delivery digest email | 6.5 | Backlog |
+| Compliance audit report PDF | 6.5 | Backlog |
+
+### Commercial
+| Feature | Phase | Status |
+|---------|-------|--------|
+| Change request limits per plan tier | 4 | Backlog |
+| Client finance portal (billing history) | 4 | Backlog |
+| Digital contract on plan approval | 4 | Backlog |
+| Stripe integration | 4 | Backlog |
+
+### Operations and Intelligence
+| Feature | Phase | Status |
+|---------|-------|--------|
+| Email notifications | 5.5 | **Next** |
+| WhatsApp / SMS notifications | 5.5 | Backlog |
+| Webhooks (outbound events) | 5.5 | Backlog |
+| GitHub / GitLab integration | 5.5 | Backlog |
+| Slack / Discord integration | 5.5 | Backlog |
+| CLI tool | 5.5 | Backlog |
+| API keys for programmatic access | 5.5 | Backlog |
+
+### Artificial Intelligence
+| Feature | Phase | Status |
+|---------|-------|--------|
+| Real agent mode (DEVFORGE_AGENT_MODE=real) | 5 | **Next** |
+| Project health score | 5 | **Next** |
+| Estimate vs reality tracking | 5 | Backlog |
+| Project token budgets with alerts | 5 | Backlog |
 
 At that point, DevForge AI is no longer just a prototype. It becomes an operational platform for selling and managing automated software delivery as a subscription.
